@@ -146,3 +146,76 @@ def delete_note(note_id: str, current_user = Depends(get_current_user)):
         return {"message": "Note deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Note not found")
+
+@app.post("/test/run-all")
+def run_all_tests():
+    """Run all basic tests and return results."""
+    import tempfile
+    from ..auth import UserAuth
+    from ..crypto import NoteCrypto
+    from ..storage import NoteStorage
+
+    results = []
+
+    try:
+        # Test 1: User creation
+        with tempfile.TemporaryDirectory() as temp_dir:
+            auth = UserAuth(temp_dir)
+            assert auth.create_user("testuser", "password123") == True
+            assert auth.user_exists("testuser") == True
+            assert auth.create_user("testuser", "password123") == False
+        results.append({"test": "User Creation", "status": "PASSED"})
+    except Exception as e:
+        results.append({"test": "User Creation", "status": "FAILED", "error": str(e)})
+
+    try:
+        # Test 2: User login
+        with tempfile.TemporaryDirectory() as temp_dir:
+            auth = UserAuth(temp_dir)
+            auth.create_user("testuser", "password123")
+            note_key = auth.login("testuser", "password123")
+            assert note_key is not None
+            assert len(note_key) == 32
+            assert auth.login("testuser", "wrongpassword") is None
+        results.append({"test": "User Login", "status": "PASSED"})
+    except Exception as e:
+        results.append({"test": "User Login", "status": "FAILED", "error": str(e)})
+
+    try:
+        # Test 3: Note encryption
+        with tempfile.TemporaryDirectory() as temp_dir:
+            auth = UserAuth(temp_dir)
+            auth.create_user("testuser", "password123")
+            note_key = auth.login("testuser", "password123")
+            crypto = NoteCrypto(note_key)
+            original_text = "This is a secret note!"
+            encrypted, nonce = crypto.encrypt(original_text)
+            assert encrypted != original_text
+            decrypted = crypto.decrypt(encrypted, nonce)
+            assert decrypted == original_text
+        results.append({"test": "Note Encryption", "status": "PASSED"})
+    except Exception as e:
+        results.append({"test": "Note Encryption", "status": "FAILED", "error": str(e)})
+
+    try:
+        # Test 4: Note storage
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage_test = NoteStorage(temp_dir)
+            note_id = storage_test.add_note("testuser", "encrypted_title", "encrypted_content", "nonce123", "nonce456")
+            notes = storage_test.get_notes("testuser")
+            assert len(notes) == 1
+            note = storage_test.get_note_by_id("testuser", note_id)
+            assert note is not None
+            assert storage_test.delete_note("testuser", note_id) == True
+        results.append({"test": "Note Storage", "status": "PASSED"})
+    except Exception as e:
+        results.append({"test": "Note Storage", "status": "FAILED", "error": str(e)})
+
+    passed = len([r for r in results if r["status"] == "PASSED"])
+    total = len(results)
+
+    return {
+        "summary": f"{passed}/{total} tests passed",
+        "all_passed": passed == total,
+        "results": results
+    }
