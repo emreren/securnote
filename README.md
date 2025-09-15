@@ -20,7 +20,7 @@ A simple encrypted note-taking application for educational cryptography purposes
 # Clone and run
 git clone <repo-url>
 cd securnote
-docker-compose up --build
+docker compose up --build
 
 # Access Swagger UI at http://localhost:8000/docs
 ```
