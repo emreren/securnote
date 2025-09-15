@@ -147,13 +147,22 @@ def delete_note(note_id: str, current_user = Depends(get_current_user)):
     else:
         raise HTTPException(status_code=404, detail="Note not found")
 
-@app.post("/test/run-all")
+@app.post("/test/run-all", tags=["Testing"])
 def run_all_tests():
     """Run all basic tests and return results."""
     import tempfile
-    from ..auth import UserAuth
-    from ..crypto import NoteCrypto
-    from ..storage import NoteStorage
+    import sys
+    import os
+
+    # Add parent directory to path for imports
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+    from auth import UserAuth
+    from crypto import NoteCrypto
+    from storage import NoteStorage
 
     results = []
 
