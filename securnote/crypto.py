@@ -1,9 +1,12 @@
 """
-Simple note encryption module.
+Simple note encryption module with PKI support.
 """
 import base64
 import secrets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.exceptions import InvalidSignature
 
 
 class NoteCrypto:
@@ -30,3 +33,189 @@ class NoteCrypto:
         
         decrypted = self.aes.decrypt(nonce, encrypted, None)
         return decrypted.decode()
+
+
+class CertificateAuthority:
+    def __init__(self, ca_private_key=None):
+        """Initialize CA with private key. Generate new one if not provided."""
+        if ca_private_key is None:
+            self.ca_private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+            )
+        else:
+            self.ca_private_key = ca_private_key
+
+        self.ca_public_key = self.ca_private_key.public_key()
+
+    def export_ca_public_key(self):
+        """Export CA public key as PEM format."""
+        return self.ca_public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+    def export_ca_private_key(self, password=None):
+        """Export CA private key as PEM format."""
+        encryption = serialization.BestAvailableEncryption(password.encode()) if password else serialization.NoEncryption()
+        return self.ca_private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=encryption
+        )
+
+    def issue_certificate(self, username, user_public_key):
+        """Issue certificate for user. Returns signed certificate."""
+        # Certificate message: username + public key
+        cert_data = f"{username}:{user_public_key.decode()}".encode()
+
+        # Sign the certificate with CA private key
+        signature = self.ca_private_key.sign(
+            cert_data,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        return {
+            'username': username,
+            'public_key': user_public_key.decode(),
+            'signature': base64.b64encode(signature).decode(),
+            'issued_by': 'SecurNote CA'
+        }
+
+    def verify_certificate(self, certificate):
+        """Verify certificate signature. Returns True if valid."""
+        try:
+            # Reconstruct certificate data
+            cert_data = f"{certificate['username']}:{certificate['public_key']}".encode()
+            signature = base64.b64decode(certificate['signature'])
+
+            # Verify signature with CA public key
+            self.ca_public_key.verify(
+                signature,
+                cert_data,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except InvalidSignature:
+            return False
+
+    @classmethod
+    def from_private_key_pem(cls, pem_data, password=None):
+        """Load CA from private key PEM data."""
+        ca_private_key = serialization.load_pem_private_key(
+            pem_data,
+            password=password.encode() if password else None,
+        )
+        return cls(ca_private_key=ca_private_key)
+
+
+class SecureUser:
+    def __init__(self, username, private_key=None):
+        """Initialize user with username and optional private key."""
+        self.username = username
+        if private_key is None:
+            self.private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+            )
+        else:
+            self.private_key = private_key
+
+        self.public_key = self.private_key.public_key()
+        self.certificate = None
+
+    def export_public_key(self):
+        """Export public key as PEM format."""
+        return self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+
+    def request_certificate(self, ca):
+        """Request certificate from CA."""
+        user_public_key_pem = self.export_public_key()
+        self.certificate = ca.issue_certificate(self.username, user_public_key_pem)
+        return self.certificate
+
+    def encrypt_message(self, message, recipient_certificate, ca):
+        """Encrypt message for recipient using their certificate."""
+        # First verify recipient's certificate
+        if not ca.verify_certificate(recipient_certificate):
+            raise ValueError("Invalid recipient certificate")
+
+        # Load recipient's public key
+        recipient_public_key = serialization.load_pem_public_key(
+            recipient_certificate['public_key'].encode()
+        )
+
+        # Encrypt message
+        ciphertext = recipient_public_key.encrypt(
+            message.encode(),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+
+        # Sign the message
+        signature = self.private_key.sign(
+            message.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        return {
+            'ciphertext': base64.b64encode(ciphertext).decode(),
+            'signature': base64.b64encode(signature).decode(),
+            'sender_certificate': self.certificate
+        }
+
+    def decrypt_message(self, encrypted_message, ca):
+        """Decrypt and verify message."""
+        # Verify sender's certificate
+        sender_cert = encrypted_message['sender_certificate']
+        if not ca.verify_certificate(sender_cert):
+            raise ValueError("Invalid sender certificate")
+
+        # Decrypt message
+        ciphertext = base64.b64decode(encrypted_message['ciphertext'])
+        plaintext = self.private_key.decrypt(
+            ciphertext,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+
+        # Verify signature
+        sender_public_key = serialization.load_pem_public_key(
+            sender_cert['public_key'].encode()
+        )
+        signature = base64.b64decode(encrypted_message['signature'])
+
+        try:
+            sender_public_key.verify(
+                signature,
+                plaintext,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return plaintext.decode(), True  # (message, signature_valid)
+        except InvalidSignature:
+            return plaintext.decode(), False  # Message decrypted but signature invalid
