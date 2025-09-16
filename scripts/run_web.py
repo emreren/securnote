@@ -3,6 +3,9 @@ Run the FastAPI web server.
 """
 import uvicorn
 import os
+import sys
+sys.path.insert(0, '/app')
+
 from securnote.logging_config import setup_logging
 from securnote.web.main import app
 

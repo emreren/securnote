@@ -5,6 +5,7 @@ Runs the administrative interface for PKI management.
 """
 import sys
 import os
+sys.path.insert(0, '/app')
 
 try:
     import uvicorn
