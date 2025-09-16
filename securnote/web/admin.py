@@ -8,6 +8,9 @@ import secrets
 from typing import List
 from ..application import get_application
 from ..exceptions import CertificateRevokedError, UserNotFoundError
+from ..logging_config import get_logger
+
+logger = get_logger('admin')
 
 admin_app = FastAPI(
     title="SecurNote Admin Panel",
@@ -24,6 +27,8 @@ ADMIN_PASSWORD = "securnote_admin_2024"
 
 def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
     """Verify admin credentials."""
+    logger.info(f"Admin authentication attempt for: {credentials.username}")
+
     is_correct_username = secrets.compare_digest(
         credentials.username, ADMIN_USERNAME
     )
@@ -32,11 +37,14 @@ def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
     )
 
     if not (is_correct_username and is_correct_password):
+        logger.warning(f"Admin authentication failed for: {credentials.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid admin credentials",
             headers={"WWW-Authenticate": "Basic"},
         )
+
+    logger.info(f"Admin authenticated successfully: {credentials.username}")
     return credentials.username
 
 @admin_app.get("/")
@@ -82,9 +90,14 @@ def revoke_user_certificate_admin(
     admin_user = Depends(verify_admin)
 ):
     """Revoke user's certificate (Admin only)."""
+    logger.warning(f"Admin {admin_user} attempting to revoke certificate for user: {username}, reason: {reason}")
+
     success = app_instance.revoke_user_certificate(username, reason)
     if not success:
+        logger.error(f"Certificate revocation failed for user: {username} by admin: {admin_user}")
         raise HTTPException(status_code=404, detail="User or certificate not found")
+
+    logger.critical(f"Certificate REVOKED for user: {username} by admin: {admin_user}, reason: {reason}")
 
     return {
         "message": f"Certificate for {username} revoked by admin",

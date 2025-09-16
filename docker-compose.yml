@@ -9,6 +9,7 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
     command: ["python", "scripts/run_web.py"]
     restart: unless-stopped
 
@@ -20,6 +21,7 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
     command: ["python", "scripts/run_admin.py"]
     depends_on:
       - app

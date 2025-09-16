@@ -10,6 +10,9 @@ from ..application import SecurNoteApplication, get_application
 from ..crypto import NoteCrypto
 from ..storage import NoteStorage
 from ..exceptions import CertificateRevokedError, UserNotFoundError, InvalidCredentialsError
+from ..logging_config import get_logger
+
+logger = get_logger('web')
 
 app = FastAPI(
     title="SecurNote API",
@@ -52,12 +55,15 @@ class NoteListItem(BaseModel):
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     """Authenticate user with enhanced security validation."""
     try:
+        logger.info(f"Authentication attempt for user: {credentials.username}")
+
         # Enhanced authentication with certificate validation
         note_key, access_granted = app_instance.authenticate_with_validation(
             credentials.username, credentials.password
         )
 
         if not note_key:
+            logger.warning(f"Authentication failed for user: {credentials.username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -65,6 +71,7 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
             )
 
         if not access_granted:
+            logger.warning(f"Certificate access denied for user: {credentials.username}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Certificate revoked or invalid - access denied"

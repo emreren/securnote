@@ -4,12 +4,18 @@ SecurNote Admin Panel Server
 Runs the administrative interface for PKI management.
 """
 import sys
+import os
 
 try:
     import uvicorn
+    from securnote.logging_config import setup_logging
     from securnote.web.admin import admin_app
 
     if __name__ == "__main__":
+        # Setup logging first
+        log_level = os.getenv('LOG_LEVEL', 'INFO')
+        setup_logging(log_level)
+
         print("🔧 Starting SecurNote Admin Panel...")
         print("📋 Admin Credentials:")
         print("   Username: admin")
@@ -21,7 +27,7 @@ try:
             admin_app,
             host="0.0.0.0",
             port=8001,
-            log_level="info"
+            log_config=None
         )
 
 except ImportError as e:
