@@ -30,4 +30,4 @@ RUN mkdir -p data
 EXPOSE 8000 8001
 
 # Run the application (default: main API)
-CMD ["python", "run_web.py"]
+CMD ["python", "scripts/run_web.py"]
