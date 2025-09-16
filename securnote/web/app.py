@@ -274,18 +274,15 @@ def run_all_tests():
         "results": results
     }
 
-# PKI Management Endpoints
-@app.get("/certificates/{username}", tags=["PKI"])
-def get_user_certificate(username: str, current_user = Depends(get_current_user)):
-    """Get user's certificate information with validation status."""
-    if current_user["username"] != username:
-        raise HTTPException(status_code=403, detail="Can only access your own certificate")
-
-    user_cert = app_instance.get_user_certificate(username)
+# Certificate information endpoint (user can view their own certificate)
+@app.get("/users/me/certificate")
+def get_my_certificate(current_user = Depends(get_current_user)):
+    """Get current user's certificate information."""
+    user_cert = app_instance.get_user_certificate(current_user["username"])
     if not user_cert:
         raise HTTPException(status_code=404, detail="Certificate not found")
 
-    is_valid = app_instance.validate_user_access(username)
+    is_valid = app_instance.validate_user_access(current_user["username"])
 
     return {
         "certificate": user_cert,
@@ -295,31 +292,8 @@ def get_user_certificate(username: str, current_user = Depends(get_current_user)
             "not_revoked": is_valid,
             "issued_by_trusted_ca": True
         },
-        "security_level": "Enterprise Grade" if is_valid else "Revoked"
-    }
-
-@app.post("/certificates/{username}/revoke", tags=["PKI"])
-def revoke_user_certificate(username: str, reason: str = "unspecified"):
-    """Revoke user's certificate (Admin function)."""
-    success = app_instance.revoke_user_certificate(username, reason)
-    if not success:
-        raise HTTPException(status_code=404, detail="User or certificate not found")
-
-    return {
-        "message": f"Certificate for {username} revoked successfully",
-        "reason": reason,
-        "effect": "User will lose access to notes until certificate is reissued",
-        "security_action": "Certificate added to CRL"
-    }
-
-@app.get("/certificates/revoked", tags=["PKI"])
-def get_revoked_certificates():
-    """Get comprehensive revoked certificates list."""
-    revoked_list = app_instance.get_revoked_certificates()
-    return {
-        "revoked_certificates": revoked_list,
-        "total_revoked": len(revoked_list),
-        "crl_status": "Active and Enforced"
+        "security_level": "Enterprise Grade" if is_valid else "Revoked",
+        "admin_note": "For certificate management operations, contact system administrator"
     }
 
 @app.post("/system/cleanup", tags=["System"])
