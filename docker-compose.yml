@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  securnote:
+  app:
     build: .
     ports:
       - "8000:8000"
@@ -9,4 +9,18 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+    command: ["python", "run_web.py"]
+    restart: unless-stopped
+
+  admin:
+    build: .
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "run_admin.py"]
+    depends_on:
+      - app
     restart: unless-stopped

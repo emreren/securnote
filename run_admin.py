@@ -3,6 +3,8 @@
 SecurNote Admin Panel Server
 Runs the administrative interface for PKI management.
 """
+import sys
+
 try:
     import uvicorn
     from securnote.web.admin import admin_app
@@ -22,10 +24,14 @@ try:
             log_level="info"
         )
 
-except ImportError:
-    print("⚠️ uvicorn not installed. Install with: pip install uvicorn")
-    print("📝 For testing admin panel functionality:")
-    print("   1. Install uvicorn: pip install uvicorn")
-    print("   2. Run: python3 run_admin.py")
-    print("   3. Access: http://localhost:8001")
-    print("   4. Credentials: admin / securnote_admin_2024")
+except ImportError as e:
+    print(f"⚠️ Missing dependencies: {e}")
+    print("📝 Admin panel requires FastAPI and uvicorn")
+    print("💡 Alternative: Use Docker container which has all dependencies")
+    print("   docker run -p 8001:8001 securnote python3 run_admin.py")
+    print()
+    print("📋 Admin Panel Implementation Ready:")
+    print("   - File: securnote/web/admin.py")
+    print("   - Authentication: admin / securnote_admin_2024")
+    print("   - Endpoints: Certificate management, revocation, cleanup")
+    sys.exit(1)
