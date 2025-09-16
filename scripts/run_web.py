@@ -2,7 +2,13 @@
 Run the FastAPI web server.
 """
 import uvicorn
+import os
+from securnote.logging_config import setup_logging
 from securnote.web.main import app
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Setup logging first
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    setup_logging(log_level)
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_config=None)
