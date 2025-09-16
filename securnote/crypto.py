@@ -3,6 +3,9 @@ Simple note encryption module with PKI support.
 """
 import base64
 import secrets
+import json
+import os
+from datetime import datetime
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -36,7 +39,7 @@ class NoteCrypto:
 
 
 class CertificateAuthority:
-    def __init__(self, ca_private_key=None):
+    def __init__(self, ca_private_key=None, data_dir="data"):
         """Initialize CA with private key. Generate new one if not provided."""
         if ca_private_key is None:
             self.ca_private_key = rsa.generate_private_key(
@@ -47,6 +50,12 @@ class CertificateAuthority:
             self.ca_private_key = ca_private_key
 
         self.ca_public_key = self.ca_private_key.public_key()
+
+        # Initialize CRL system
+        self.data_dir = data_dir
+        os.makedirs(data_dir, exist_ok=True)
+        self.crl_file = os.path.join(data_dir, "revoked_certificates.json")
+        self._init_crl()
 
     def export_ca_public_key(self):
         """Export CA public key as PEM format."""
@@ -66,6 +75,9 @@ class CertificateAuthority:
 
     def issue_certificate(self, username, user_public_key):
         """Issue certificate for user. Returns signed certificate."""
+        # Generate unique certificate ID
+        cert_id = secrets.token_hex(16)
+
         # Certificate message: username + public key
         cert_data = f"{username}:{user_public_key.decode()}".encode()
 
@@ -80,16 +92,22 @@ class CertificateAuthority:
         )
 
         return {
+            'cert_id': cert_id,
             'username': username,
             'public_key': user_public_key.decode(),
             'signature': base64.b64encode(signature).decode(),
-            'issued_by': 'SecurNote CA'
+            'issued_by': 'SecurNote CA',
+            'issued_at': datetime.now().isoformat()
         }
 
     def verify_certificate(self, certificate):
-        """Verify certificate signature. Returns True if valid."""
+        """Verify certificate signature and revocation status."""
         try:
-            # Reconstruct certificate data
+            # First check if certificate is revoked
+            if self.is_certificate_revoked(certificate.get('cert_id')):
+                return False
+
+            # Then verify signature
             cert_data = f"{certificate['username']}:{certificate['public_key']}".encode()
             signature = base64.b64decode(certificate['signature'])
 
@@ -106,6 +124,66 @@ class CertificateAuthority:
             return True
         except InvalidSignature:
             return False
+
+    def _init_crl(self):
+        """Initialize Certificate Revocation List file."""
+        if not os.path.exists(self.crl_file):
+            with open(self.crl_file, 'w') as f:
+                json.dump({'revoked_certificates': []}, f, indent=2)
+
+    def revoke_certificate(self, cert_id, reason="unspecified"):
+        """Revoke a certificate by adding it to CRL."""
+        if not cert_id:
+            return False
+
+        # Load current CRL
+        with open(self.crl_file, 'r') as f:
+            crl_data = json.load(f)
+
+        # Check if already revoked
+        for revoked_cert in crl_data['revoked_certificates']:
+            if revoked_cert['cert_id'] == cert_id:
+                return False  # Already revoked
+
+        # Add to revoked list
+        revocation_entry = {
+            'cert_id': cert_id,
+            'revoked_at': datetime.now().isoformat(),
+            'reason': reason
+        }
+
+        crl_data['revoked_certificates'].append(revocation_entry)
+
+        # Save updated CRL
+        with open(self.crl_file, 'w') as f:
+            json.dump(crl_data, f, indent=2)
+
+        return True
+
+    def is_certificate_revoked(self, cert_id):
+        """Check if certificate is revoked."""
+        if not cert_id or not os.path.exists(self.crl_file):
+            return False
+
+        with open(self.crl_file, 'r') as f:
+            crl_data = json.load(f)
+
+        # Check if cert_id is in revoked list
+        for revoked_cert in crl_data['revoked_certificates']:
+            if revoked_cert['cert_id'] == cert_id:
+                return True
+
+        return False
+
+    def get_revoked_certificates(self):
+        """Get list of all revoked certificates."""
+        if not os.path.exists(self.crl_file):
+            return []
+
+        with open(self.crl_file, 'r') as f:
+            crl_data = json.load(f)
+
+        return crl_data['revoked_certificates']
 
     @classmethod
     def from_private_key_pem(cls, pem_data, password=None):
@@ -147,9 +225,13 @@ class SecureUser:
 
     def encrypt_message(self, message, recipient_certificate, ca):
         """Encrypt message for recipient using their certificate."""
-        # First verify recipient's certificate
+        # First verify sender's (our) certificate is not revoked
+        if self.certificate and not ca.verify_certificate(self.certificate):
+            raise ValueError("Sender certificate is revoked or invalid")
+
+        # Then verify recipient's certificate
         if not ca.verify_certificate(recipient_certificate):
-            raise ValueError("Invalid recipient certificate")
+            raise ValueError("Invalid or revoked recipient certificate")
 
         # Load recipient's public key
         recipient_public_key = serialization.load_pem_public_key(
