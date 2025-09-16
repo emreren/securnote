@@ -9,7 +9,7 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
-    command: ["python", "run_web.py"]
+    command: ["python", "scripts/run_web.py"]
     restart: unless-stopped
 
   admin:
@@ -20,7 +20,7 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
-    command: ["python", "run_admin.py"]
+    command: ["python", "scripts/run_admin.py"]
     depends_on:
       - app
     restart: unless-stopped
