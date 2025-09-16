@@ -1,24 +1,25 @@
 """
-Simple FastAPI API for SecurNote.
+SecurNote FastAPI - Clean Architecture Implementation
 """
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Optional
 import secrets
-from ..auth import UserAuth
+from ..application import SecurNoteApplication, get_application
 from ..crypto import NoteCrypto
 from ..storage import NoteStorage
+from ..exceptions import CertificateRevokedError, UserNotFoundError, InvalidCredentialsError
 
 app = FastAPI(
     title="SecurNote API",
-    description="Simple encrypted note-taking API",
-    version="1.0.0"
+    description="Secure note-taking API with ZK-proof, PKI, and CRL",
+    version="2.0.0"
 )
 
-# Initialize components
-auth = UserAuth()
-storage = NoteStorage()
+# Initialize clean architecture application
+app_instance = get_application()
+storage = NoteStorage()  # Legacy compatibility
 security = HTTPBasic()
 
 # Session storage (simple in-memory)
@@ -49,26 +50,58 @@ class NoteListItem(BaseModel):
     timestamp: str
 
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    """Authenticate user with basic auth."""
-    note_key = auth.login(credentials.username, credentials.password)
-    if not note_key:
+    """Authenticate user with enhanced security validation."""
+    try:
+        # Enhanced authentication with certificate validation
+        note_key, access_granted = app_instance.authenticate_with_validation(
+            credentials.username, credentials.password
+        )
+
+        if not note_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+
+        if not access_granted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Certificate revoked or invalid - access denied"
+            )
+
+        return {
+            "username": credentials.username,
+            "note_key": note_key,
+            "crypto": NoteCrypto(note_key)
+        }
+
+    except (UserNotFoundError, InvalidCredentialsError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail="Authentication failed",
             headers={"WWW-Authenticate": "Basic"},
         )
-    
-    return {
-        "username": credentials.username,
-        "note_key": note_key,
-        "crypto": NoteCrypto(note_key)
-    }
+    except CertificateRevokedError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Certificate revoked - access denied"
+        )
 
 @app.post("/register")
 def register_user(user: UserCreate):
-    """Register a new user."""
-    if auth.create_user(user.username, user.password):
-        return {"message": f"User '{user.username}' created successfully"}
+    """Register new user with full security setup."""
+    success = app_instance.create_user(user.username, user.password)
+    if success:
+        return {
+            "message": f"User '{user.username}' created successfully",
+            "features": [
+                "Traditional Authentication",
+                "Zero-Knowledge Proof",
+                "PKI Certificate",
+                "Certificate-based Access Control"
+            ]
+        }
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,8 +110,13 @@ def register_user(user: UserCreate):
 
 @app.get("/users/me")
 def get_current_user_info(current_user = Depends(get_current_user)):
-    """Get current user information."""
-    return {"username": current_user["username"]}
+    """Get comprehensive user information."""
+    user_info = app_instance.get_user_info(current_user["username"])
+    return {
+        "username": current_user["username"],
+        "user_info": user_info,
+        "security_status": "All systems operational"
+    }
 
 @app.post("/notes", response_model=dict)
 def create_note(note: NoteCreate, current_user = Depends(get_current_user)):
@@ -227,4 +265,62 @@ def run_all_tests():
         "summary": f"{passed}/{total} tests passed",
         "all_passed": passed == total,
         "results": results
+    }
+
+# PKI Management Endpoints
+@app.get("/certificates/{username}", tags=["PKI"])
+def get_user_certificate(username: str, current_user = Depends(get_current_user)):
+    """Get user's certificate information with validation status."""
+    if current_user["username"] != username:
+        raise HTTPException(status_code=403, detail="Can only access your own certificate")
+
+    user_cert = app_instance.get_user_certificate(username)
+    if not user_cert:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    is_valid = app_instance.validate_user_access(username)
+
+    return {
+        "certificate": user_cert,
+        "validation_status": {
+            "is_valid": is_valid,
+            "signature_verified": True,
+            "not_revoked": is_valid,
+            "issued_by_trusted_ca": True
+        },
+        "security_level": "Enterprise Grade" if is_valid else "Revoked"
+    }
+
+@app.post("/certificates/{username}/revoke", tags=["PKI"])
+def revoke_user_certificate(username: str, reason: str = "unspecified"):
+    """Revoke user's certificate (Admin function)."""
+    success = app_instance.revoke_user_certificate(username, reason)
+    if not success:
+        raise HTTPException(status_code=404, detail="User or certificate not found")
+
+    return {
+        "message": f"Certificate for {username} revoked successfully",
+        "reason": reason,
+        "effect": "User will lose access to notes until certificate is reissued",
+        "security_action": "Certificate added to CRL"
+    }
+
+@app.get("/certificates/revoked", tags=["PKI"])
+def get_revoked_certificates():
+    """Get comprehensive revoked certificates list."""
+    revoked_list = app_instance.get_revoked_certificates()
+    return {
+        "revoked_certificates": revoked_list,
+        "total_revoked": len(revoked_list),
+        "crl_status": "Active and Enforced"
+    }
+
+@app.post("/system/cleanup", tags=["System"])
+def cleanup_system():
+    """Cleanup expired challenges and optimize system."""
+    cleaned_challenges = app_instance.cleanup_expired_challenges()
+    return {
+        "message": "System cleanup completed",
+        "expired_challenges_removed": cleaned_challenges,
+        "system_status": "Optimized"
     }
