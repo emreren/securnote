@@ -192,15 +192,22 @@ def run_all_tests():
     import sys
     import os
 
-    # Add parent directory to path for imports
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-
-    from auth import UserAuth
-    from crypto import NoteCrypto
-    from storage import NoteStorage
+    # Use absolute imports to avoid relative import issues
+    try:
+        from securnote.auth import UserAuth
+        from securnote.crypto import NoteCrypto
+        from securnote.storage import NoteStorage
+    except ImportError:
+        # Fallback for different environments
+        import sys
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(os.path.dirname(current_dir))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        from securnote.auth import UserAuth
+        from securnote.crypto import NoteCrypto
+        from securnote.storage import NoteStorage
 
     results = []
 
