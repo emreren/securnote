@@ -4,6 +4,7 @@ Encrypted note-taking application for educational cryptography purposes.
 
 ## Features
 
+- **Zero-Knowledge Authentication**: Password verification without password transmission
 - **Secure Authentication**: SHA-256 + salt password hashing
 - **Note Encryption**: AES-256-GCM authenticated encryption
 - **PKI System**: RSA-based Public Key Infrastructure with Certificate Authority
@@ -34,7 +35,20 @@ poetry run python run_web.py            # Web API (http://localhost:8000/docs)
 poetry run python demo.py               # Demo
 ```
 
-## Security Architecture
+## Zero-Knowledge Authentication
+
+Password verification without sending passwords over network.
+
+**Registration:**
+- You provide: username + password
+- System stores: username + hash(password)
+- Your actual password is never stored
+
+**Login Process:**
+1. Server sends random challenge number
+2. Client calculates: proof = hash(password_hash + challenge)
+3. Server verifies proof matches expected value
+4. Challenge is destroyed after use
 
 ### Symmetric Encryption
 - Password hashing with SHA-256 + salt
@@ -48,21 +62,31 @@ poetry run python demo.py               # Demo
 - Certificate-based identity verification
 - End-to-end encrypted messaging
 
+## Development
+
+```bash
+# Install dependencies
+poetry install
+
+# Run tests
+poetry run python tests/test_basic.py
+
+# Run demo
+poetry run python demo.py
+```
 
 ## Project Structure
 
 ```
 securnote/
 ├── securnote/
-│   ├── auth.py          # User authentication
-│   ├── crypto.py        # Note encryption
-│   ├── storage.py       # JSON file storage
-│   ├── cli.py           # CLI interface
-│   └── web/
-│       └── app.py       # FastAPI web interface
-├── tests/               # Basic tests
-├── Dockerfile           # Docker container
-├── docker-compose.yml   # Docker Compose setup
-└── run_web.py          # Web server runner
+│   ├── auth.py          # Traditional + ZK authentication
+│   ├── zkauth.py        # Zero-knowledge proof system
+│   ├── crypto.py        # Encryption + PKI system
+│   ├── storage.py       # Encrypted note storage
+│   └── web/app.py       # Web API interface
+├── tests/               # Basic functionality tests
+├── test_zkauth.py       # Zero-knowledge auth tests
+└── test_pki.py          # PKI system tests
 ```
 
