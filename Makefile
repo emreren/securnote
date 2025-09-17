@@ -7,6 +7,8 @@ help:
 	@echo "  format      Format code with black and isort"
 	@echo "  lint        Run linting checks"
 	@echo "  test        Run tests with coverage"
+	@echo "  test-unit   Run unit tests only"
+	@echo "  test-integration  Run integration tests only"
 	@echo "  check       Run all checks (format, lint, test)"
 	@echo "  clean       Clean cache files"
 	@echo "  pre-commit  Setup pre-commit hooks"
@@ -27,6 +29,12 @@ lint:
 
 test:
 	poetry run pytest
+
+test-unit:
+	poetry run pytest -m "unit or not integration"
+
+test-integration:
+	poetry run pytest -m integration
 
 check: format lint test
 

@@ -72,7 +72,19 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=securnote --cov-report=term-missing --cov-report=html"
+addopts = [
+    "--cov=securnote",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=40",
+    "--strict-markers",
+    "-v"
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
