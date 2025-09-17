@@ -1,15 +1,24 @@
 """
 Application facade layer - maintains backward compatibility with existing API.
 """
-from typing import Optional, List, Tuple
 
-from .models import SecurityConfig
-from .repository import UserRepository, ChallengeRepository, RevocationRepository, NoteRepository
-from .services import AuthService, ZKProofService, CertificateService, NoteService
+from typing import List, Optional, Tuple
+
 from .exceptions import (
-    UserAlreadyExistsError, UserNotFoundError, InvalidCredentialsError,
-    CertificateRevokedError, AccessDeniedError
+    AccessDeniedError,
+    CertificateRevokedError,
+    InvalidCredentialsError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
 )
+from .models import SecurityConfig
+from .repository import (
+    ChallengeRepository,
+    NoteRepository,
+    RevocationRepository,
+    UserRepository,
+)
+from .services import AuthService, CertificateService, NoteService, ZKProofService
 
 
 class SecurNoteApplication:
@@ -31,9 +40,15 @@ class SecurNoteApplication:
 
         # Services
         self.auth_service = AuthService(self.user_repo, self.config)
-        self.zk_service = ZKProofService(self.user_repo, self.challenge_repo, self.config)
-        self.cert_service = CertificateService(self.user_repo, self.revocation_repo, self.config)
-        self.note_service = NoteService(self.note_repo, self.auth_service, self.cert_service)
+        self.zk_service = ZKProofService(
+            self.user_repo, self.challenge_repo, self.config
+        )
+        self.cert_service = CertificateService(
+            self.user_repo, self.revocation_repo, self.config
+        )
+        self.note_service = NoteService(
+            self.note_repo, self.auth_service, self.cert_service
+        )
 
     # === Backward Compatible API ===
 
@@ -88,12 +103,12 @@ class SecurNoteApplication:
                 return None
 
             return {
-                'cert_id': cert.cert_id,
-                'username': cert.username,
-                'public_key': cert.public_key,
-                'signature': cert.signature,
-                'issued_by': cert.issued_by,
-                'issued_at': cert.issued_at
+                "cert_id": cert.cert_id,
+                "username": cert.username,
+                "public_key": cert.public_key,
+                "signature": cert.signature,
+                "issued_by": cert.issued_by,
+                "issued_at": cert.issued_at,
             }
         except UserNotFoundError:
             return None
@@ -105,7 +120,9 @@ class SecurNoteApplication:
         except Exception:
             return False
 
-    def revoke_user_certificate(self, username: str, reason: str = "unspecified") -> bool:
+    def revoke_user_certificate(
+        self, username: str, reason: str = "unspecified"
+    ) -> bool:
         """Revoke user certificate. (Backward compatible)"""
         return self.cert_service.revoke_certificate(username, reason)
 
@@ -118,16 +135,20 @@ class SecurNoteApplication:
             cert_valid = self.cert_service.verify_certificate(username)
 
             return {
-                'username': user.username,
-                'created_at': user.created_at.isoformat() if user.created_at else None,
-                'is_active': user.is_active,
-                'certificate_valid': cert_valid,
-                'certificate_id': user.certificate.cert_id if user.certificate.cert_id else None
+                "username": user.username,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "is_active": user.is_active,
+                "certificate_valid": cert_valid,
+                "certificate_id": (
+                    user.certificate.cert_id if user.certificate.cert_id else None
+                ),
             }
         except UserNotFoundError:
             return {}
 
-    def authenticate_with_validation(self, username: str, password: str) -> Tuple[Optional[bytes], bool]:
+    def authenticate_with_validation(
+        self, username: str, password: str
+    ) -> Tuple[Optional[bytes], bool]:
         """
         Enhanced authentication with certificate validation.
         Returns: (note_key, access_granted)
@@ -143,7 +164,9 @@ class SecurNoteApplication:
         except (UserNotFoundError, InvalidCredentialsError):
             return None, False
 
-    def create_note_secure(self, username: str, title: str, content: str, note_key: bytes) -> str:
+    def create_note_secure(
+        self, username: str, title: str, content: str, note_key: bytes
+    ) -> str:
         """Create note with comprehensive security validation."""
         return self.note_service.create_note(username, title, content, note_key)
 
@@ -151,7 +174,9 @@ class SecurNoteApplication:
         """Get user notes with security validation."""
         return self.note_service.get_user_notes(username)
 
-    def get_note_by_id_secure(self, username: str, note_id: str, note_key: bytes) -> Optional[Tuple[str, str]]:
+    def get_note_by_id_secure(
+        self, username: str, note_id: str, note_key: bytes
+    ) -> Optional[Tuple[str, str]]:
         """Get note by ID with security validation."""
         return self.note_service.get_note_by_id(username, note_id, note_key)
 
@@ -164,16 +189,18 @@ class SecurNoteApplication:
         revoked_list = self.cert_service.get_revoked_certificates()
         return [
             {
-                'cert_id': rev.cert_id,
-                'revoked_at': rev.revoked_at.isoformat(),
-                'reason': rev.reason
+                "cert_id": rev.cert_id,
+                "revoked_at": rev.revoked_at.isoformat(),
+                "reason": rev.reason,
             }
             for rev in revoked_list
         ]
 
     def cleanup_expired_challenges(self) -> int:
         """Clean up expired challenges."""
-        return self.challenge_repo.cleanup_expired_challenges(self.config.challenge_expiry_seconds)
+        return self.challenge_repo.cleanup_expired_challenges(
+            self.config.challenge_expiry_seconds
+        )
 
     # === Properties ===
 
@@ -223,7 +250,9 @@ class UserAuth:
     def validate_user_access(self, username: str) -> bool:
         return self.app.validate_user_access(username)
 
-    def revoke_user_certificate(self, username: str, reason: str = "unspecified") -> bool:
+    def revoke_user_certificate(
+        self, username: str, reason: str = "unspecified"
+    ) -> bool:
         return self.app.revoke_user_certificate(username, reason)
 
     # Expose CA for backward compatibility

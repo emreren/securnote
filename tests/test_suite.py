@@ -3,16 +3,16 @@
 SecurNote Comprehensive Test Suite
 All system functionality tests in one organized file.
 """
-import tempfile
-import sys
 import os
 import subprocess
+import sys
+import tempfile
 
 # Add securnote to path
-sys.path.append('/workspace/securnote')
+sys.path.append("/workspace/securnote")
 
 from securnote.auth import UserAuth
-from securnote.crypto import NoteCrypto, CertificateAuthority, SecureUser
+from securnote.crypto import CertificateAuthority, NoteCrypto, SecureUser
 from securnote.storage import NoteStorage
 
 
@@ -116,19 +116,24 @@ def test_note_storage():
         storage = NoteStorage(temp_dir)
 
         # Add note
-        note_id = storage.add_note("david", "encrypted_title", "encrypted_content",
-                                 "title_nonce", "content_nonce")
+        note_id = storage.add_note(
+            "david",
+            "encrypted_title",
+            "encrypted_content",
+            "title_nonce",
+            "content_nonce",
+        )
         assert note_id is not None
 
         # Get notes
         notes = storage.get_notes("david")
         assert len(notes) == 1
-        assert notes[0]['id'] == note_id
+        assert notes[0]["id"] == note_id
 
         # Get specific note
         note = storage.get_note_by_id("david", note_id)
         assert note is not None
-        assert note['title_encrypted'] == "encrypted_title"
+        assert note["title_encrypted"] == "encrypted_title"
 
         # Delete note
         assert storage.delete_note("david", note_id) == True
@@ -148,9 +153,9 @@ def test_pki_system():
         alice_cert = alice.request_certificate(ca)
         bob_cert = bob.request_certificate(ca)
 
-        assert alice_cert['username'] == "alice"
-        assert bob_cert['username'] == "bob"
-        assert 'cert_id' in alice_cert
+        assert alice_cert["username"] == "alice"
+        assert bob_cert["username"] == "bob"
+        assert "cert_id" in alice_cert
 
         # Verify certificates
         assert ca.verify_certificate(alice_cert) == True
@@ -174,14 +179,14 @@ def test_certificate_revocation():
 
         # Initially valid
         assert ca.verify_certificate(alice_cert) == True
-        assert ca.is_certificate_revoked(alice_cert['cert_id']) == False
+        assert ca.is_certificate_revoked(alice_cert["cert_id"]) == False
 
         # Revoke certificate
-        assert ca.revoke_certificate(alice_cert['cert_id'], "test_revocation") == True
+        assert ca.revoke_certificate(alice_cert["cert_id"], "test_revocation") == True
 
         # Should now be invalid
         assert ca.verify_certificate(alice_cert) == False
-        assert ca.is_certificate_revoked(alice_cert['cert_id']) == True
+        assert ca.is_certificate_revoked(alice_cert["cert_id"]) == True
 
 
 def test_integrated_system():
@@ -196,7 +201,7 @@ def test_integrated_system():
         # Check certificate was created
         cert = auth.get_user_certificate("eve")
         assert cert is not None
-        assert cert['username'] == "eve"
+        assert cert["username"] == "eve"
 
         # Validate access
         assert auth.validate_user_access("eve") == True
@@ -209,7 +214,9 @@ def test_integrated_system():
         title_enc, title_nonce = crypto.encrypt("Important Note")
         content_enc, content_nonce = crypto.encrypt("Secret information")
 
-        note_id = storage.add_note("eve", title_enc, content_enc, title_nonce, content_nonce)
+        note_id = storage.add_note(
+            "eve", title_enc, content_enc, title_nonce, content_nonce
+        )
         assert note_id is not None
 
         # Revoke certificate
@@ -227,10 +234,11 @@ def test_web_api_integration():
             [sys.executable, "run_web.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd="/workspace/securnote"
+            cwd="/workspace/securnote",
         )
 
         import time
+
         time.sleep(2)  # Wait for server to start
 
         import requests
@@ -239,15 +247,13 @@ def test_web_api_integration():
         response = requests.post(
             "http://localhost:8000/register",
             json={"username": "apitest", "password": "apitest123"},
-            timeout=5
+            timeout=5,
         )
         assert response.status_code == 200
 
         # Test notes endpoint with auth
         response = requests.get(
-            "http://localhost:8000/notes",
-            auth=("apitest", "apitest123"),
-            timeout=5
+            "http://localhost:8000/notes", auth=("apitest", "apitest123"), timeout=5
         )
         assert response.status_code == 200
 
@@ -255,7 +261,7 @@ def test_web_api_integration():
         response = requests.get(
             "http://localhost:8000/certificates/apitest",
             auth=("apitest", "apitest123"),
-            timeout=5
+            timeout=5,
         )
         assert response.status_code == 200
 
@@ -263,7 +269,7 @@ def test_web_api_integration():
         process.wait()
 
     except Exception as e:
-        if 'process' in locals():
+        if "process" in locals():
             process.terminate()
         raise e
 
@@ -275,6 +281,7 @@ def test_system_performance():
 
         # Create multiple users quickly
         import time
+
         start_time = time.time()
 
         for i in range(10):
@@ -294,13 +301,13 @@ def test_system_performance():
 
         # Performance should be reasonable
         assert creation_time < 30  # 10 users in under 30 seconds
-        assert login_time < 5      # 10 logins in under 5 seconds
+        assert login_time < 5  # 10 logins in under 5 seconds
 
 
 def main():
     """Run all tests in organized fashion."""
     print("🔒 SecurNote Comprehensive Test Suite")
-    print("="*60)
+    print("=" * 60)
 
     runner = TestRunner()
 

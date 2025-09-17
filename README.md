@@ -66,9 +66,33 @@ Notes are protected using industry-standard encryption:
 
 ## Development
 
+### Setup Development Environment
+```bash
+# Install with development dependencies
+poetry install --extras dev
+
+# Setup pre-commit hooks
+make pre-commit
+```
+
+### Code Quality
+```bash
+# Format code
+make format
+
+# Run linting
+make lint
+
+# Run tests with coverage
+make test
+
+# Run all checks
+make check
+```
+
 ### Running Tests
 ```bash
-poetry run python tests/test_basic.py
+poetry run pytest
 ```
 
 ### Project Structure
@@ -93,4 +117,3 @@ securnote/
 ## License
 
 This project is for demonstration purposes.
-

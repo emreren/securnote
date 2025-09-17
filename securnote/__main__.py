@@ -1,6 +1,7 @@
 """
 Entry point for SecurNote application.
 """
+
 from .cli import SecurNoteCLI
 
 if __name__ == "__main__":

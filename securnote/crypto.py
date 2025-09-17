@@ -1,39 +1,63 @@
 """
 Simple note encryption module with PKI support.
 """
+
 import base64
-import secrets
 import json
 import os
+import secrets
 from datetime import datetime
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes, serialization
+from typing import Any, Dict, Optional, Tuple
+
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 class NoteCrypto:
-    def __init__(self, key):
-        """Initialize with user's note key."""
+    """Handles note encryption and decryption using AES-GCM."""
+
+    def __init__(self, key: bytes) -> None:
+        """Initialize with user's note key.
+
+        Args:
+            key: 256-bit encryption key for AES-GCM
+        """
         self.key = key
         self.aes = AESGCM(key)
-    
-    def encrypt(self, text):
-        """Encrypt text. Returns (encrypted_data, nonce) as base64 strings."""
+
+    def encrypt(self, text: str) -> Tuple[str, str]:
+        """Encrypt text using AES-GCM.
+
+        Args:
+            text: Plain text to encrypt
+
+        Returns:
+            Tuple of (encrypted_data, nonce) as base64 strings
+        """
         nonce = secrets.token_bytes(12)  # 96-bit nonce for GCM
         encrypted = self.aes.encrypt(nonce, text.encode(), None)
-        
+
         # Return as base64 for JSON storage
         encrypted_b64 = base64.b64encode(encrypted).decode()
         nonce_b64 = base64.b64encode(nonce).decode()
-        
+
         return encrypted_b64, nonce_b64
-    
-    def decrypt(self, encrypted_b64, nonce_b64):
-        """Decrypt base64 encoded data. Returns original text."""
+
+    def decrypt(self, encrypted_b64: str, nonce_b64: str) -> str:
+        """Decrypt base64 encoded data.
+
+        Args:
+            encrypted_b64: Base64 encoded encrypted data
+            nonce_b64: Base64 encoded nonce
+
+        Returns:
+            Original plain text
+        """
         encrypted = base64.b64decode(encrypted_b64)
         nonce = base64.b64decode(nonce_b64)
-        
+
         decrypted = self.aes.decrypt(nonce, encrypted, None)
         return decrypted.decode()
 
@@ -61,16 +85,20 @@ class CertificateAuthority:
         """Export CA public key as PEM format."""
         return self.ca_public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
 
     def export_ca_private_key(self, password=None):
         """Export CA private key as PEM format."""
-        encryption = serialization.BestAvailableEncryption(password.encode()) if password else serialization.NoEncryption()
+        encryption = (
+            serialization.BestAvailableEncryption(password.encode())
+            if password
+            else serialization.NoEncryption()
+        )
         return self.ca_private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=encryption
+            encryption_algorithm=encryption,
         )
 
     def issue_certificate(self, username, user_public_key):
@@ -85,31 +113,32 @@ class CertificateAuthority:
         signature = self.ca_private_key.sign(
             cert_data,
             padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
+                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
             ),
-            hashes.SHA256()
+            hashes.SHA256(),
         )
 
         return {
-            'cert_id': cert_id,
-            'username': username,
-            'public_key': user_public_key.decode(),
-            'signature': base64.b64encode(signature).decode(),
-            'issued_by': 'SecurNote CA',
-            'issued_at': datetime.now().isoformat()
+            "cert_id": cert_id,
+            "username": username,
+            "public_key": user_public_key.decode(),
+            "signature": base64.b64encode(signature).decode(),
+            "issued_by": "SecurNote CA",
+            "issued_at": datetime.now().isoformat(),
         }
 
     def verify_certificate(self, certificate):
         """Verify certificate signature and revocation status."""
         try:
             # First check if certificate is revoked
-            if self.is_certificate_revoked(certificate.get('cert_id')):
+            if self.is_certificate_revoked(certificate.get("cert_id")):
                 return False
 
             # Then verify signature
-            cert_data = f"{certificate['username']}:{certificate['public_key']}".encode()
-            signature = base64.b64decode(certificate['signature'])
+            cert_data = (
+                f"{certificate['username']}:{certificate['public_key']}".encode()
+            )
+            signature = base64.b64decode(certificate["signature"])
 
             # Verify signature with CA public key
             self.ca_public_key.verify(
@@ -117,9 +146,9 @@ class CertificateAuthority:
                 cert_data,
                 padding.PSS(
                     mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
+                    salt_length=padding.PSS.MAX_LENGTH,
                 ),
-                hashes.SHA256()
+                hashes.SHA256(),
             )
             return True
         except InvalidSignature:
@@ -128,8 +157,8 @@ class CertificateAuthority:
     def _init_crl(self):
         """Initialize Certificate Revocation List file."""
         if not os.path.exists(self.crl_file):
-            with open(self.crl_file, 'w') as f:
-                json.dump({'revoked_certificates': []}, f, indent=2)
+            with open(self.crl_file, "w") as f:
+                json.dump({"revoked_certificates": []}, f, indent=2)
 
     def revoke_certificate(self, cert_id, reason="unspecified"):
         """Revoke a certificate by adding it to CRL."""
@@ -137,25 +166,25 @@ class CertificateAuthority:
             return False
 
         # Load current CRL
-        with open(self.crl_file, 'r') as f:
+        with open(self.crl_file, "r") as f:
             crl_data = json.load(f)
 
         # Check if already revoked
-        for revoked_cert in crl_data['revoked_certificates']:
-            if revoked_cert['cert_id'] == cert_id:
+        for revoked_cert in crl_data["revoked_certificates"]:
+            if revoked_cert["cert_id"] == cert_id:
                 return False  # Already revoked
 
         # Add to revoked list
         revocation_entry = {
-            'cert_id': cert_id,
-            'revoked_at': datetime.now().isoformat(),
-            'reason': reason
+            "cert_id": cert_id,
+            "revoked_at": datetime.now().isoformat(),
+            "reason": reason,
         }
 
-        crl_data['revoked_certificates'].append(revocation_entry)
+        crl_data["revoked_certificates"].append(revocation_entry)
 
         # Save updated CRL
-        with open(self.crl_file, 'w') as f:
+        with open(self.crl_file, "w") as f:
             json.dump(crl_data, f, indent=2)
 
         return True
@@ -165,12 +194,12 @@ class CertificateAuthority:
         if not cert_id or not os.path.exists(self.crl_file):
             return False
 
-        with open(self.crl_file, 'r') as f:
+        with open(self.crl_file, "r") as f:
             crl_data = json.load(f)
 
         # Check if cert_id is in revoked list
-        for revoked_cert in crl_data['revoked_certificates']:
-            if revoked_cert['cert_id'] == cert_id:
+        for revoked_cert in crl_data["revoked_certificates"]:
+            if revoked_cert["cert_id"] == cert_id:
                 return True
 
         return False
@@ -180,10 +209,10 @@ class CertificateAuthority:
         if not os.path.exists(self.crl_file):
             return []
 
-        with open(self.crl_file, 'r') as f:
+        with open(self.crl_file, "r") as f:
             crl_data = json.load(f)
 
-        return crl_data['revoked_certificates']
+        return crl_data["revoked_certificates"]
 
     @classmethod
     def from_private_key_pem(cls, pem_data, password=None):
@@ -214,7 +243,7 @@ class SecureUser:
         """Export public key as PEM format."""
         return self.public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
 
     def request_certificate(self, ca):
@@ -235,7 +264,7 @@ class SecureUser:
 
         # Load recipient's public key
         recipient_public_key = serialization.load_pem_public_key(
-            recipient_certificate['public_key'].encode()
+            recipient_certificate["public_key"].encode()
         )
 
         # Encrypt message
@@ -244,49 +273,48 @@ class SecureUser:
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
-                label=None
-            )
+                label=None,
+            ),
         )
 
         # Sign the message
         signature = self.private_key.sign(
             message.encode(),
             padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
+                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
             ),
-            hashes.SHA256()
+            hashes.SHA256(),
         )
 
         return {
-            'ciphertext': base64.b64encode(ciphertext).decode(),
-            'signature': base64.b64encode(signature).decode(),
-            'sender_certificate': self.certificate
+            "ciphertext": base64.b64encode(ciphertext).decode(),
+            "signature": base64.b64encode(signature).decode(),
+            "sender_certificate": self.certificate,
         }
 
     def decrypt_message(self, encrypted_message, ca):
         """Decrypt and verify message."""
         # Verify sender's certificate
-        sender_cert = encrypted_message['sender_certificate']
+        sender_cert = encrypted_message["sender_certificate"]
         if not ca.verify_certificate(sender_cert):
             raise ValueError("Invalid sender certificate")
 
         # Decrypt message
-        ciphertext = base64.b64decode(encrypted_message['ciphertext'])
+        ciphertext = base64.b64decode(encrypted_message["ciphertext"])
         plaintext = self.private_key.decrypt(
             ciphertext,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
-                label=None
-            )
+                label=None,
+            ),
         )
 
         # Verify signature
         sender_public_key = serialization.load_pem_public_key(
-            sender_cert['public_key'].encode()
+            sender_cert["public_key"].encode()
         )
-        signature = base64.b64decode(encrypted_message['signature'])
+        signature = base64.b64decode(encrypted_message["signature"])
 
         try:
             sender_public_key.verify(
@@ -294,9 +322,9 @@ class SecureUser:
                 plaintext,
                 padding.PSS(
                     mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
+                    salt_length=padding.PSS.MAX_LENGTH,
                 ),
-                hashes.SHA256()
+                hashes.SHA256(),
             )
             return plaintext.decode(), True  # (message, signature_valid)
         except InvalidSignature:
