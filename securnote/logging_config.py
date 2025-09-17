@@ -2,18 +2,20 @@
 Logging configuration for SecurNote
 Container-friendly logging setup
 """
+
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+
 
 def setup_logging(log_level="INFO", log_file=None):
     """Setup logging configuration for SecurNote."""
 
     # Create formatter
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # Setup root logger
@@ -36,11 +38,11 @@ def setup_logging(log_level="INFO", log_file=None):
 
     # SecurNote specific loggers
     loggers = {
-        'securnote.auth': logging.getLogger('securnote.auth'),
-        'securnote.crypto': logging.getLogger('securnote.crypto'),
-        'securnote.web': logging.getLogger('securnote.web'),
-        'securnote.admin': logging.getLogger('securnote.admin'),
-        'securnote.storage': logging.getLogger('securnote.storage')
+        "securnote.auth": logging.getLogger("securnote.auth"),
+        "securnote.crypto": logging.getLogger("securnote.crypto"),
+        "securnote.web": logging.getLogger("securnote.web"),
+        "securnote.admin": logging.getLogger("securnote.admin"),
+        "securnote.storage": logging.getLogger("securnote.storage"),
     }
 
     # Set levels for specific modules
@@ -50,21 +52,26 @@ def setup_logging(log_level="INFO", log_file=None):
     logging.info("Logging configured successfully")
     return loggers
 
+
 def get_logger(name):
     """Get logger for specific module."""
-    return logging.getLogger(f'securnote.{name}')
+    return logging.getLogger(f"securnote.{name}")
+
 
 # Container environment detection
 def is_container():
     """Detect if running in container."""
     import os
-    return Path('/.dockerenv').exists() or 'KUBERNETES_SERVICE_HOST' in os.environ
+
+    return Path("/.dockerenv").exists() or "KUBERNETES_SERVICE_HOST" in os.environ
+
 
 # Default setup for imports
 if __name__ != "__main__":
     import os
-    log_level = os.getenv('LOG_LEVEL', 'INFO')
-    log_file = os.getenv('LOG_FILE', None)
+
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    log_file = os.getenv("LOG_FILE", None)
 
     # In container, always log to stdout
     if is_container():

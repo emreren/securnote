@@ -1,23 +1,30 @@
 """
 SecurNote FastAPI - Clean Architecture Implementation
 """
-from fastapi import FastAPI, HTTPException, Depends, status
+
+import secrets
+from typing import List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
-from typing import List, Optional
-import secrets
+
 from ..application import SecurNoteApplication, get_application
 from ..crypto import NoteCrypto
-from ..storage import NoteStorage
-from ..exceptions import CertificateRevokedError, UserNotFoundError, InvalidCredentialsError
+from ..exceptions import (
+    CertificateRevokedError,
+    InvalidCredentialsError,
+    UserNotFoundError,
+)
 from ..logging_config import get_logger
+from ..storage import NoteStorage
 
-logger = get_logger('web')
+logger = get_logger("web")
 
 app = FastAPI(
     title="SecurNote API",
     description="Secure note-taking API with ZK-proof, PKI, and CRL",
-    version="2.0.0"
+    version="2.0.0",
 )
 
 # Initialize clean architecture application
@@ -28,18 +35,22 @@ security = HTTPBasic()
 # Session storage (simple in-memory)
 active_sessions = {}
 
+
 # Pydantic models
 class UserCreate(BaseModel):
     username: str
     password: str
 
+
 class UserLogin(BaseModel):
     username: str
     password: str
 
+
 class NoteCreate(BaseModel):
     title: str
     content: str
+
 
 class NoteResponse(BaseModel):
     id: str
@@ -47,10 +58,12 @@ class NoteResponse(BaseModel):
     content: str
     timestamp: str
 
+
 class NoteListItem(BaseModel):
     id: str
     title: str
     timestamp: str
+
 
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     """Authenticate user with enhanced security validation."""
@@ -71,16 +84,18 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
             )
 
         if not access_granted:
-            logger.warning(f"Certificate access denied for user: {credentials.username}")
+            logger.warning(
+                f"Certificate access denied for user: {credentials.username}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Certificate revoked or invalid - access denied"
+                detail="Certificate revoked or invalid - access denied",
             )
 
         return {
             "username": credentials.username,
             "note_key": note_key,
-            "crypto": NoteCrypto(note_key)
+            "crypto": NoteCrypto(note_key),
         }
 
     except (UserNotFoundError, InvalidCredentialsError):
@@ -92,8 +107,9 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     except CertificateRevokedError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Certificate revoked - access denied"
+            detail="Certificate revoked - access denied",
         )
+
 
 @app.post("/register")
 def register_user(user: UserCreate):
@@ -106,98 +122,107 @@ def register_user(user: UserCreate):
                 "Traditional Authentication",
                 "Zero-Knowledge Proof",
                 "PKI Certificate",
-                "Certificate-based Access Control"
-            ]
+                "Certificate-based Access Control",
+            ],
         }
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already exists"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
         )
 
+
 @app.get("/users/me")
-def get_current_user_info(current_user = Depends(get_current_user)):
+def get_current_user_info(current_user=Depends(get_current_user)):
     """Get comprehensive user information."""
     user_info = app_instance.get_user_info(current_user["username"])
     return {
         "username": current_user["username"],
         "user_info": user_info,
-        "security_status": "All systems operational"
+        "security_status": "All systems operational",
     }
 
+
 @app.post("/notes", response_model=dict)
-def create_note(note: NoteCreate, current_user = Depends(get_current_user)):
+def create_note(note: NoteCreate, current_user=Depends(get_current_user)):
     """Create a new encrypted note."""
     title_enc, title_nonce = current_user["crypto"].encrypt(note.title)
     content_enc, content_nonce = current_user["crypto"].encrypt(note.content)
-    
+
     note_id = storage.add_note(
-        current_user["username"],
-        title_enc,
-        content_enc,
-        title_nonce,
-        content_nonce
+        current_user["username"], title_enc, content_enc, title_nonce, content_nonce
     )
-    
+
     return {"id": note_id, "message": "Note created successfully"}
 
+
 @app.get("/notes", response_model=List[NoteListItem])
-def list_notes(current_user = Depends(get_current_user)):
+def list_notes(current_user=Depends(get_current_user)):
     """List all user's notes with decrypted titles."""
     notes = storage.get_notes(current_user["username"])
-    
+
     decrypted_notes = []
     for note in notes:
         try:
-            title = current_user["crypto"].decrypt(note['title_encrypted'], note['title_nonce'])
-            decrypted_notes.append(NoteListItem(
-                id=note["id"],
-                title=title,
-                timestamp=note["timestamp"][:19]
-            ))
+            title = current_user["crypto"].decrypt(
+                note["title_encrypted"], note["title_nonce"]
+            )
+            decrypted_notes.append(
+                NoteListItem(
+                    id=note["id"], title=title, timestamp=note["timestamp"][:19]
+                )
+            )
         except:
-            decrypted_notes.append(NoteListItem(
-                id=note["id"],
-                title="[Decryption Error]",
-                timestamp=note["timestamp"][:19]
-            ))
-    
+            decrypted_notes.append(
+                NoteListItem(
+                    id=note["id"],
+                    title="[Decryption Error]",
+                    timestamp=note["timestamp"][:19],
+                )
+            )
+
     return decrypted_notes
 
+
 @app.get("/notes/{note_id}", response_model=NoteResponse)
-def get_note(note_id: str, current_user = Depends(get_current_user)):
+def get_note(note_id: str, current_user=Depends(get_current_user)):
     """Get a specific note by ID."""
     note = storage.get_note_by_id(current_user["username"], note_id)
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
-    
+
     try:
-        title = current_user["crypto"].decrypt(note['title_encrypted'], note['title_nonce'])
-        content = current_user["crypto"].decrypt(note['content_encrypted'], note['content_nonce'])
-        
+        title = current_user["crypto"].decrypt(
+            note["title_encrypted"], note["title_nonce"]
+        )
+        content = current_user["crypto"].decrypt(
+            note["content_encrypted"], note["content_nonce"]
+        )
+
         return NoteResponse(
             id=note["id"],
             title=title,
             content=content,
-            timestamp=note["timestamp"][:19]
+            timestamp=note["timestamp"][:19],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to decrypt note")
 
+
 @app.delete("/notes/{note_id}")
-def delete_note(note_id: str, current_user = Depends(get_current_user)):
+def delete_note(note_id: str, current_user=Depends(get_current_user)):
     """Delete a note by ID."""
     if storage.delete_note(current_user["username"], note_id):
         return {"message": "Note deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Note not found")
 
+
 @app.post("/test/run-all", tags=["Testing"])
 def run_all_tests():
     """Run all basic tests and return results."""
-    import tempfile
-    import sys
     import os
+    import sys
+    import tempfile
 
     # Use absolute imports to avoid relative import issues
     try:
@@ -206,8 +231,9 @@ def run_all_tests():
         from securnote.storage import NoteStorage
     except ImportError:
         # Fallback for different environments
-        import sys
         import os
+        import sys
+
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(os.path.dirname(current_dir))
         if parent_dir not in sys.path:
@@ -262,7 +288,13 @@ def run_all_tests():
         # Test 4: Note storage
         with tempfile.TemporaryDirectory() as temp_dir:
             storage_test = NoteStorage(temp_dir)
-            note_id = storage_test.add_note("testuser", "encrypted_title", "encrypted_content", "nonce123", "nonce456")
+            note_id = storage_test.add_note(
+                "testuser",
+                "encrypted_title",
+                "encrypted_content",
+                "nonce123",
+                "nonce456",
+            )
             notes = storage_test.get_notes("testuser")
             assert len(notes) == 1
             note = storage_test.get_note_by_id("testuser", note_id)
@@ -278,12 +310,13 @@ def run_all_tests():
     return {
         "summary": f"{passed}/{total} tests passed",
         "all_passed": passed == total,
-        "results": results
+        "results": results,
     }
+
 
 # Certificate information endpoint (user can view their own certificate)
 @app.get("/users/me/certificate")
-def get_my_certificate(current_user = Depends(get_current_user)):
+def get_my_certificate(current_user=Depends(get_current_user)):
     """Get current user's certificate information."""
     user_cert = app_instance.get_user_certificate(current_user["username"])
     if not user_cert:
@@ -297,11 +330,12 @@ def get_my_certificate(current_user = Depends(get_current_user)):
             "is_valid": is_valid,
             "signature_verified": True,
             "not_revoked": is_valid,
-            "issued_by_trusted_ca": True
+            "issued_by_trusted_ca": True,
         },
         "security_level": "Enterprise Grade" if is_valid else "Revoked",
-        "admin_note": "For certificate management operations, contact system administrator"
+        "admin_note": "For certificate management operations, contact system administrator",
     }
+
 
 @app.post("/system/cleanup", tags=["System"])
 def cleanup_system():
@@ -310,5 +344,5 @@ def cleanup_system():
     return {
         "message": "System cleanup completed",
         "expired_challenges_removed": cleaned_challenges,
-        "system_status": "Optimized"
+        "system_status": "Optimized",
     }

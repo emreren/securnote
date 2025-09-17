@@ -2,10 +2,11 @@
 Simple Zero-Knowledge Proof Authentication
 Challenge-response system without password transmission
 """
+
 import hashlib
-import secrets
 import json
 import os
+import secrets
 
 
 class ZKAuth:
@@ -27,12 +28,12 @@ class ZKAuth:
         password_hash = hashlib.sha256(salt + password.encode()).hexdigest()
 
         user_data = {
-            'username': username,
-            'salt': salt.hex(),
-            'password_hash': password_hash
+            "username": username,
+            "salt": salt.hex(),
+            "password_hash": password_hash,
         }
 
-        with open(user_file, 'w') as f:
+        with open(user_file, "w") as f:
             json.dump(user_data, f)
 
         return True
@@ -49,13 +50,9 @@ class ZKAuth:
 
         # Store challenge temporarily
         challenge_file = os.path.join(self.data_dir, f"challenge_{challenge}.json")
-        challenge_data = {
-            'username': username,
-            'challenge': challenge,
-            'used': False
-        }
+        challenge_data = {"username": username, "challenge": challenge, "used": False}
 
-        with open(challenge_file, 'w') as f:
+        with open(challenge_file, "w") as f:
             json.dump(challenge_data, f)
 
         return challenge
@@ -68,15 +65,15 @@ class ZKAuth:
             return None
 
         # Load user data
-        with open(user_file, 'r') as f:
+        with open(user_file, "r") as f:
             user_data = json.load(f)
 
         # Recreate password hash
-        salt = bytes.fromhex(user_data['salt'])
+        salt = bytes.fromhex(user_data["salt"])
         password_hash = hashlib.sha256(salt + password.encode()).hexdigest()
 
         # Verify password is correct
-        if password_hash != user_data['password_hash']:
+        if password_hash != user_data["password_hash"]:
             return None
 
         # Generate proof: hash(password_hash + challenge)
@@ -93,24 +90,24 @@ class ZKAuth:
             return False
 
         # Check challenge validity
-        with open(challenge_file, 'r') as f:
+        with open(challenge_file, "r") as f:
             challenge_data = json.load(f)
 
-        if challenge_data['used'] or challenge_data['username'] != username:
+        if challenge_data["used"] or challenge_data["username"] != username:
             return False
 
         # Mark challenge as used
-        challenge_data['used'] = True
-        with open(challenge_file, 'w') as f:
+        challenge_data["used"] = True
+        with open(challenge_file, "w") as f:
             json.dump(challenge_data, f)
 
         # Load user data
-        with open(user_file, 'r') as f:
+        with open(user_file, "r") as f:
             user_data = json.load(f)
 
         # Calculate expected proof
         expected_proof = hashlib.sha256(
-            (user_data['password_hash'] + challenge).encode()
+            (user_data["password_hash"] + challenge).encode()
         ).hexdigest()
 
         return proof == expected_proof

@@ -1,20 +1,40 @@
 """
 Service layer for business logic.
 """
+
 import hashlib
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, List, Tuple
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
+from typing import List, Optional, Tuple
 
-from .models import User, AuthData, ZKData, Certificate, Challenge, RevocationEntry, Note, SecurityConfig
-from .repository import UserRepository, ChallengeRepository, RevocationRepository, NoteRepository
-from .crypto import CertificateAuthority, SecureUser, NoteCrypto
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+from .crypto import CertificateAuthority, NoteCrypto, SecureUser
 from .exceptions import (
-    InvalidCredentialsError, UserAlreadyExistsError, UserNotFoundError,
-    CertificateRevokedError, InvalidProofError, ChallengeExpiredError,
-    ChallengeAlreadyUsedError
+    CertificateRevokedError,
+    ChallengeAlreadyUsedError,
+    ChallengeExpiredError,
+    InvalidCredentialsError,
+    InvalidProofError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+)
+from .models import (
+    AuthData,
+    Certificate,
+    Challenge,
+    Note,
+    RevocationEntry,
+    SecurityConfig,
+    User,
+    ZKData,
+)
+from .repository import (
+    ChallengeRepository,
+    NoteRepository,
+    RevocationRepository,
+    UserRepository,
 )
 
 
@@ -36,19 +56,14 @@ class AuthService:
         auth_hash = hashlib.sha256(auth_salt + password.encode()).hexdigest()
 
         auth_data = AuthData(
-            auth_salt=auth_salt,
-            note_salt=note_salt,
-            password_hash=auth_hash
+            auth_salt=auth_salt, note_salt=note_salt, password_hash=auth_hash
         )
 
         # Generate ZK auth data
         zk_salt = secrets.token_bytes(self.config.zk_salt_size)
         zk_hash = hashlib.sha256(zk_salt + password.encode()).hexdigest()
 
-        zk_data = ZKData(
-            salt=zk_salt,
-            password_hash=zk_hash
-        )
+        zk_data = ZKData(salt=zk_salt, password_hash=zk_hash)
 
         # Create placeholder certificate (will be filled by CertificateService)
         certificate = Certificate(
@@ -57,14 +72,14 @@ class AuthService:
             public_key="",
             signature="",
             issued_by="",
-            issued_at=""
+            issued_at="",
         )
 
         user = User(
             username=username,
             auth_data=auth_data,
             zk_data=zk_data,
-            certificate=certificate
+            certificate=certificate,
         )
 
         return user
@@ -76,7 +91,9 @@ class AuthService:
             raise UserNotFoundError(f"User {username} not found")
 
         # Verify password
-        password_hash = hashlib.sha256(user.auth_data.auth_salt + password.encode()).hexdigest()
+        password_hash = hashlib.sha256(
+            user.auth_data.auth_salt + password.encode()
+        ).hexdigest()
         if password_hash != user.auth_data.password_hash:
             raise InvalidCredentialsError("Invalid password")
 
@@ -85,7 +102,7 @@ class AuthService:
             algorithm=hashes.SHA256(),
             length=32,
             salt=user.auth_data.note_salt,
-            iterations=self.config.pbkdf2_iterations
+            iterations=self.config.pbkdf2_iterations,
         )
         note_key = kdf.derive(password.encode())
         return note_key
@@ -101,7 +118,12 @@ class AuthService:
 class ZKProofService:
     """Zero-knowledge proof business logic."""
 
-    def __init__(self, user_repo: UserRepository, challenge_repo: ChallengeRepository, config: SecurityConfig):
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        challenge_repo: ChallengeRepository,
+        config: SecurityConfig,
+    ):
         self.user_repo = user_repo
         self.challenge_repo = challenge_repo
         self.config = config
@@ -120,7 +142,8 @@ class ZKProofService:
             username=username,
             challenge_data=challenge_data,
             created_at=datetime.now(),
-            expires_at=datetime.now() + timedelta(seconds=self.config.challenge_expiry_seconds)
+            expires_at=datetime.now()
+            + timedelta(seconds=self.config.challenge_expiry_seconds),
         )
 
         self.challenge_repo.save_challenge(challenge)
@@ -133,7 +156,9 @@ class ZKProofService:
             raise UserNotFoundError(f"User {username} not found")
 
         # Recreate password hash
-        password_hash = hashlib.sha256(user.zk_data.salt + password.encode()).hexdigest()
+        password_hash = hashlib.sha256(
+            user.zk_data.salt + password.encode()
+        ).hexdigest()
 
         # Verify password is correct
         if password_hash != user.zk_data.password_hash:
@@ -150,14 +175,15 @@ class ZKProofService:
         # Find challenge by data (simplified - in production would use better lookup)
         # For now, iterate through recent challenges
         for filename in os.listdir(self.challenge_repo.data_dir):
-            if filename.startswith('challenge_') and filename.endswith('.json'):
+            if filename.startswith("challenge_") and filename.endswith(".json"):
                 challenge_id = filename[10:-5]  # Extract ID from filename
                 challenge = self.challenge_repo.get_challenge(challenge_id)
 
-                if (challenge and
-                    challenge.username == username and
-                    challenge.challenge_data == challenge_data):
-
+                if (
+                    challenge
+                    and challenge.username == username
+                    and challenge.challenge_data == challenge_data
+                ):
                     # Check if already used
                     if challenge.used:
                         raise ChallengeAlreadyUsedError("Challenge already used")
@@ -192,7 +218,12 @@ class ZKProofService:
 class CertificateService:
     """PKI certificate business logic."""
 
-    def __init__(self, user_repo: UserRepository, revocation_repo: RevocationRepository, config: SecurityConfig):
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        revocation_repo: RevocationRepository,
+        config: SecurityConfig,
+    ):
         self.user_repo = user_repo
         self.revocation_repo = revocation_repo
         self.config = config
@@ -208,12 +239,12 @@ class CertificateService:
 
         # Update user's certificate
         user.certificate = Certificate(
-            cert_id=cert_data['cert_id'],
-            username=cert_data['username'],
-            public_key=cert_data['public_key'],
-            signature=cert_data['signature'],
-            issued_by=cert_data['issued_by'],
-            issued_at=cert_data['issued_at']
+            cert_id=cert_data["cert_id"],
+            username=cert_data["username"],
+            public_key=cert_data["public_key"],
+            signature=cert_data["signature"],
+            issued_by=cert_data["issued_by"],
+            issued_at=cert_data["issued_at"],
         )
 
         # Save updated user
@@ -232,12 +263,12 @@ class CertificateService:
 
         # Verify with CA
         cert_dict = {
-            'cert_id': user.certificate.cert_id,
-            'username': user.certificate.username,
-            'public_key': user.certificate.public_key,
-            'signature': user.certificate.signature,
-            'issued_by': user.certificate.issued_by,
-            'issued_at': user.certificate.issued_at
+            "cert_id": user.certificate.cert_id,
+            "username": user.certificate.username,
+            "public_key": user.certificate.public_key,
+            "signature": user.certificate.signature,
+            "issued_by": user.certificate.issued_by,
+            "issued_at": user.certificate.issued_at,
         }
 
         return self.ca.verify_certificate(cert_dict)
@@ -249,9 +280,7 @@ class CertificateService:
             return False
 
         revocation = RevocationEntry(
-            cert_id=user.certificate.cert_id,
-            revoked_at=datetime.now(),
-            reason=reason
+            cert_id=user.certificate.cert_id, revoked_at=datetime.now(), reason=reason
         )
 
         self.revocation_repo.add_revocation(revocation)
@@ -265,16 +294,25 @@ class CertificateService:
 class NoteService:
     """Note management business logic."""
 
-    def __init__(self, note_repo: NoteRepository, auth_service: AuthService, cert_service: CertificateService):
+    def __init__(
+        self,
+        note_repo: NoteRepository,
+        auth_service: AuthService,
+        cert_service: CertificateService,
+    ):
         self.note_repo = note_repo
         self.auth_service = auth_service
         self.cert_service = cert_service
 
-    def create_note(self, username: str, title: str, content: str, note_key: bytes) -> str:
+    def create_note(
+        self, username: str, title: str, content: str, note_key: bytes
+    ) -> str:
         """Create encrypted note with access validation."""
         # Validate user has valid certificate
         if not self.cert_service.verify_certificate(username):
-            raise CertificateRevokedError(f"Certificate for {username} is revoked or invalid")
+            raise CertificateRevokedError(
+                f"Certificate for {username} is revoked or invalid"
+            )
 
         # Encrypt note
         crypto = NoteCrypto(note_key)
@@ -289,7 +327,7 @@ class NoteService:
             content_encrypted=content_encrypted,
             title_nonce=title_nonce,
             content_nonce=content_nonce,
-            created_at=datetime.now()
+            created_at=datetime.now(),
         )
 
         return self.note_repo.save_note(note)
@@ -298,7 +336,9 @@ class NoteService:
         """Get decrypted notes for user with access validation."""
         # Validate access
         if not self.cert_service.verify_certificate(username):
-            raise CertificateRevokedError(f"Certificate for {username} is revoked or invalid")
+            raise CertificateRevokedError(
+                f"Certificate for {username} is revoked or invalid"
+            )
 
         # Get note key
         user = self.auth_service.get_user(username)
@@ -306,13 +346,20 @@ class NoteService:
         # This is a simplified version
 
         notes = self.note_repo.get_user_notes(username)
-        return [(note.note_id, note.title_encrypted, note.created_at.isoformat()) for note in notes]
+        return [
+            (note.note_id, note.title_encrypted, note.created_at.isoformat())
+            for note in notes
+        ]
 
-    def get_note_by_id(self, username: str, note_id: str, note_key: bytes) -> Optional[Tuple[str, str]]:
+    def get_note_by_id(
+        self, username: str, note_id: str, note_key: bytes
+    ) -> Optional[Tuple[str, str]]:
         """Get and decrypt specific note."""
         # Validate access
         if not self.cert_service.verify_certificate(username):
-            raise CertificateRevokedError(f"Certificate for {username} is revoked or invalid")
+            raise CertificateRevokedError(
+                f"Certificate for {username} is revoked or invalid"
+            )
 
         note = self.note_repo.get_note_by_id(username, note_id)
         if not note:
@@ -329,6 +376,8 @@ class NoteService:
         """Delete note with access validation."""
         # Validate access
         if not self.cert_service.verify_certificate(username):
-            raise CertificateRevokedError(f"Certificate for {username} is revoked or invalid")
+            raise CertificateRevokedError(
+                f"Certificate for {username} is revoked or invalid"
+            )
 
         return self.note_repo.delete_note(username, note_id)

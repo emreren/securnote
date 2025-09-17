@@ -6,12 +6,15 @@ import sys
 import tempfile
 
 # Add securnote to path
-sys.path.append('/workspace/securnote')
+sys.path.append("/workspace/securnote")
+
+import base64
+
+from fastapi.security import HTTPBasicCredentials
+from fastapi.testclient import TestClient
 
 from securnote.web.admin import admin_app, verify_admin
-from fastapi.testclient import TestClient
-from fastapi.security import HTTPBasicCredentials
-import base64
+
 
 def test_admin_authentication():
     """Test admin authentication functionality."""
@@ -38,6 +41,7 @@ def test_admin_authentication():
         print(f"  - Available endpoints: {len(data['available_endpoints'])} endpoints")
 
     print()
+
 
 def test_admin_endpoints():
     """Test admin PKI management endpoints."""
@@ -71,6 +75,7 @@ def test_admin_endpoints():
 
     print()
 
+
 def test_integration_with_main_system():
     """Test admin panel integration with main SecurNote system."""
     print("=== Integration Test ===")
@@ -78,6 +83,7 @@ def test_integration_with_main_system():
     # Create a test user first using the main application
     with tempfile.TemporaryDirectory() as temp_dir:
         from securnote.application import get_application
+
         app_instance = get_application()
 
         # Create user
@@ -99,9 +105,11 @@ def test_integration_with_main_system():
                 print(f"  - Security level: {data['security_level']}")
 
             # Test revoking user's certificate
-            response = client.post("/certificates/testadmin/revoke",
-                                 params={"reason": "test_revocation"},
-                                 auth=auth)
+            response = client.post(
+                "/certificates/testadmin/revoke",
+                params={"reason": "test_revocation"},
+                auth=auth,
+            )
             revoke_works = response.status_code == 200
             print(f"Revoke certificate: {'✅' if revoke_works else '❌'}")
 
@@ -111,6 +119,7 @@ def test_integration_with_main_system():
                 print(f"  - Reason: {data['reason']}")
 
     print()
+
 
 def main():
     """Run all admin panel tests."""
@@ -126,6 +135,7 @@ def main():
     print("2. Start admin panel: python3 run_admin.py")
     print("3. Access: http://localhost:8001")
     print("4. Login: admin / securnote_admin_2024")
+
 
 if __name__ == "__main__":
     main()
