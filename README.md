@@ -1,22 +1,23 @@
 # SecurNote
 
-Encrypted note-taking application for educational cryptography purposes.
+A secure note-taking application that demonstrates modern cryptographic techniques for protecting user data and authentication.
+
+## Description
+
+SecurNote provides encrypted note storage with zero-knowledge authentication, ensuring that passwords are never transmitted or stored in plain text. The application implements multiple layers of security including symmetric encryption for notes and public key infrastructure for digital signatures.
 
 ## Features
 
-- **Zero-Knowledge Authentication**: Password verification without password transmission
-- **Secure Authentication**: SHA-256 + salt password hashing
-- **Note Encryption**: AES-256-GCM authenticated encryption
-- **PKI System**: RSA-based Public Key Infrastructure with Certificate Authority
-- **Digital Signatures**: Message authentication and non-repudiation
-- **CLI Interface**: Command-line tool for note management
-- **Web API**: FastAPI REST API with Swagger UI
-- **JSON Storage**: Simple file-based storage
-- **Docker Support**: Easy containerization and deployment
+- Zero-knowledge password authentication
+- Encrypted note storage with AES-256
+- Digital signatures for data integrity
+- Command-line and web interfaces
+- Docker deployment support
+- REST API with interactive documentation
 
-## Quick Start
+## Installation
 
-### Docker (Recommended)
+### Using Docker
 
 ```bash
 git clone <repo-url>
@@ -24,69 +25,72 @@ cd securnote
 docker compose up --build
 ```
 
-Access Swagger UI at: http://localhost:8000/docs
+The web interface will be available at http://localhost:8000/docs
 
-### Poetry
+### Using Poetry
 
 ```bash
 poetry install
-poetry run python -m securnote          # CLI interface
-poetry run python run_web.py            # Web API (http://localhost:8000/docs)
-poetry run python demo.py               # Demo
 ```
 
-## Zero-Knowledge Authentication
+## Usage
 
-Password verification without sending passwords over network.
-
-**Registration:**
-- You provide: username + password
-- System stores: username + hash(password)
-- Your actual password is never stored
-
-**Login Process:**
-1. Server sends random challenge number
-2. Client calculates: proof = hash(password_hash + challenge)
-3. Server verifies proof matches expected value
-4. Challenge is destroyed after use
-
-### Symmetric Encryption
-- Password hashing with SHA-256 + salt
-- Key derivation using PBKDF2 (100k iterations)
-- AES-256-GCM authenticated encryption
-- Secure file-based storage
-
-### Public Key Infrastructure (PKI)
-- RSA-2048 Certificate Authority system
-- Digital signatures with RSA-PSS + SHA-256
-- Certificate-based identity verification
-- End-to-end encrypted messaging
-
-## Development
-
+### Command Line Interface
 ```bash
-# Install dependencies
-poetry install
+poetry run python -m securnote
+```
 
-# Run tests
-poetry run python tests/test_basic.py
+### Web API
+```bash
+poetry run python run_web.py
+```
 
-# Run demo
+### Demo
+```bash
 poetry run python demo.py
 ```
 
-## Project Structure
+## How It Works
 
+### Authentication
+The system uses zero-knowledge proofs for authentication:
+- Passwords are hashed locally and never sent over the network
+- Server challenges are used to verify identity without password transmission
+- Each login session uses a unique challenge
+
+### Encryption
+Notes are protected using industry-standard encryption:
+- AES-256-GCM for symmetric encryption
+- PBKDF2 for key derivation
+- Digital signatures ensure data hasn't been tampered with
+
+## Development
+
+### Running Tests
+```bash
+poetry run python tests/test_basic.py
+```
+
+### Project Structure
 ```
 securnote/
 ├── securnote/
-│   ├── auth.py          # Traditional + ZK authentication
-│   ├── zkauth.py        # Zero-knowledge proof system
-│   ├── crypto.py        # Encryption + PKI system
-│   ├── storage.py       # Encrypted note storage
-│   └── web/app.py       # Web API interface
-├── tests/               # Basic functionality tests
-├── test_zkauth.py       # Zero-knowledge auth tests
-└── test_pki.py          # PKI system tests
+│   ├── auth.py          # Authentication system
+│   ├── zkauth.py        # Zero-knowledge authentication
+│   ├── crypto.py        # Encryption and digital signatures
+│   ├── storage.py       # Encrypted data storage
+│   └── web/             # Web API components
+├── tests/               # Test files
+└── scripts/             # Demo and utility scripts
 ```
+
+## Requirements
+
+- Python 3.8+
+- Poetry for dependency management
+- Docker (optional, for containerized deployment)
+
+## License
+
+This project is for demonstration purposes.
 
