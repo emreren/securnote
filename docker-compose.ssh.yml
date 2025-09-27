@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  securnote-ssh:
+    build:
+      context: .
+      dockerfile: Dockerfile.ssh
+    container_name: securnote-ssh-server
+    ports:
+      - "2222:22"  # SSH port (change 2222 to your preferred port)
+    volumes:
+      # Data persistence
+      - securnote_data:/home/securnote/.securnote
+
+      # SSH keys (create this directory and add your public keys)
+      - ./ssh_keys:/host_ssh_keys:ro
+
+      # Optional: Custom SSH config
+      - ./config/sshd_config:/etc/ssh/sshd_config:ro
+
+    environment:
+      - SECURNOTE_DATA_DIR=/home/securnote/.securnote
+
+    restart: unless-stopped
+
+    # Security options
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_CHROOT
+      - SETUID
+      - SETGID
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "securnote@localhost", "echo", "ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Web API service (for hybrid access)
+  securnote-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: securnote-web-api
+    ports:
+      - "8000:8000"  # Web API port
+    volumes:
+      - securnote_data:/app/data
+    environment:
+      - SECURNOTE_DATA_DIR=/app/data
+    restart: unless-stopped
+    depends_on:
+      - securnote-ssh
+
+volumes:
+  securnote_data:
+    driver: local
+
+networks:
+  default:
+    name: securnote-network
