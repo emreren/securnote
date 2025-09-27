@@ -1,119 +1,202 @@
-# SecurNote
+# SecurNote - SSH-Only Secure Note Taking
 
-A secure note-taking application that demonstrates modern cryptographic techniques for protecting user data and authentication.
+🔐 **Minimal, secure note-taking application accessed via SSH only**
 
 ## Description
 
-SecurNote provides encrypted note storage with zero-knowledge authentication, ensuring that passwords are never transmitted or stored in plain text. The application implements multiple layers of security including symmetric encryption for notes and public key infrastructure for digital signatures.
+SecurNote provides encrypted note storage with SSH-only access. No web interface, no complex monitoring - just secure, terminal-based note management with end-to-end encryption.
 
 ## Features
 
-- Zero-knowledge password authentication
-- Encrypted note storage with AES-256
-- Digital signatures for data integrity
-- Command-line and web interfaces
-- Docker deployment support
-- REST API with interactive documentation
+- 🔒 **End-to-end encryption** with AES-256
+- 🔑 **SSH-only access** - no web interface
+- 📝 **External editor support** (nano, vim)
+- 👤 **Multi-user isolation**
+- 🛡️ **Zero-knowledge authentication**
+- 🐳 **Docker deployment ready**
+- ⚡ **Minimal resource usage** (~50MB RAM)
 
-## Installation
+## Quick Start
 
-### Using Docker
-
+### 1. Docker Deployment
 ```bash
-git clone <repo-url>
+# Clone and deploy
+git clone https://github.com/emreren/securnote.git
 cd securnote
-docker compose up --build
+docker-compose up -d
+
+# Check status
+docker-compose ps
 ```
 
-The web interface will be available at http://localhost:8000/docs
-
-### Using Poetry
-
+### 2. SSH Connection
 ```bash
-poetry install
+# Connect to SecurNote
+ssh securnote@your-server-ip
+
+# Or with custom port
+ssh securnote@your-server-ip -p 2222
+```
+
+### 3. First Time Setup
+```bash
+# Register new user
+securnote register myusername mypassword
+
+# Start interactive mode
+securnote
 ```
 
 ## Usage
 
-### Command Line Interface
+### Command Line
 ```bash
-poetry run python -m securnote
+# Register user
+securnote register username password
+
+# List notes
+securnote list username password
+
+# Add note
+securnote add username password "Title" "Content"
+
+# View note
+securnote view username password note-id
+
+# Delete note
+securnote delete username password note-id
 ```
 
-### Web API
+### Interactive Mode
 ```bash
-poetry run python run_web.py
+# Start interactive CLI
+securnote
+
+# Follow prompts for:
+# - User login
+# - Note management
+# - Editor preferences
 ```
 
-### Demo
+## Configuration
+
+### SSH Key Setup
 ```bash
-poetry run python demo.py
+# Generate SSH key (on client)
+ssh-keygen -t rsa -b 4096 -C "your-email@example.com"
+
+# Copy public key to server
+ssh-copy-id securnote@your-server-ip
 ```
 
-## How It Works
+### External Editors
+- Automatically detects: nano, vim, vi
+- Set preference in interactive mode
+- Supports inline typing as fallback
 
-### Authentication
-The system uses zero-knowledge proofs for authentication:
-- Passwords are hashed locally and never sent over the network
-- Server challenges are used to verify identity without password transmission
-- Each login session uses a unique challenge
+## Deployment
 
-### Encryption
-Notes are protected using industry-standard encryption:
-- AES-256-GCM for symmetric encryption
-- PBKDF2 for key derivation
-- Digital signatures ensure data hasn't been tampered with
+### Docker Compose (Recommended)
+```yaml
+version: '3.8'
+services:
+  securnote:
+    build: .
+    ports:
+      - "2222:22"
+    volumes:
+      - ./data:/app/data
+      - ./ssh_keys:/app/ssh_keys
+    restart: unless-stopped
+```
+
+### Manual Installation
+```bash
+# Install dependencies
+poetry install
+
+# Setup SSH access
+./scripts/setup_ssh_user.sh
+
+# Start application
+poetry run securnote
+```
+
+## Security Features
+
+- ✅ **No web interface** - attack surface minimized
+- ✅ **SSH-only access** - secure transport
+- ✅ **End-to-end encryption** - notes encrypted at rest
+- ✅ **User isolation** - each user's data is separate
+- ✅ **No network listeners** - only SSH daemon
+
+## Project Structure
+
+```
+securnote/
+├── securnote/          # Core application
+│   ├── auth.py         # User authentication
+│   ├── crypto.py       # Encryption/decryption
+│   ├── storage.py      # Data persistence
+│   ├── cli.py          # Interactive CLI
+│   └── remote_cli.py   # Command-line interface
+├── scripts/            # Deployment scripts
+├── data/              # User data storage
+└── Dockerfile         # Container configuration
+```
 
 ## Development
 
-### Setup Development Environment
 ```bash
-# Install with development dependencies
+# Install dev dependencies
 poetry install --extras dev
 
-# Setup pre-commit hooks
-make pre-commit
-```
-
-### Code Quality
-```bash
 # Format code
 make format
 
-# Run linting
+# Run lints
 make lint
 
-# Run tests with coverage
+# Run tests
 make test
 
-# Run all checks
+# All checks
 make check
 ```
 
-### Running Tests
+## Examples
+
+### Basic Usage
 ```bash
-poetry run pytest
+# Connect via SSH
+ssh securnote@server
+
+# Register and use
+securnote register alice password123
+securnote add alice password123 "Shopping List" "Milk, Bread, Eggs"
+securnote list alice password123
 ```
 
-### Project Structure
-```
-securnote/
-├── securnote/
-│   ├── auth.py          # Authentication system
-│   ├── zkauth.py        # Zero-knowledge authentication
-│   ├── crypto.py        # Encryption and digital signatures
-│   ├── storage.py       # Encrypted data storage
-│   └── web/             # Web API components
-├── tests/               # Test files
-└── scripts/             # Demo and utility scripts
+### Advanced Usage
+```bash
+# Use external editor
+securnote
+> Login: alice / password123
+> Choice: 1 (Add Note)
+> Use external editor for content editing
 ```
 
-## Requirements
+## System Requirements
 
-- Python 3.8+
-- Poetry for dependency management
-- Docker (optional, for containerized deployment)
+- **RAM**: 50MB base usage
+- **Storage**: 100MB (application + user data)
+- **Network**: SSH port only (22 or custom)
+- **OS**: Linux (Docker) or any Unix-like system
 
 ## License
 
-This project is for demonstration purposes.
+MIT License - see LICENSE file for details.
+
+---
+
+**SecurNote**: Keeping your notes secure, one SSH connection at a time 🔐
