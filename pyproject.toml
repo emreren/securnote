@@ -15,6 +15,10 @@ dependencies = [
     "jinja2 (>=3.1.6,<4.0.0)"
 ]
 
+[project.scripts]
+securnote = "securnote.__main__:main"
+securnote-remote = "securnote.remote_cli:main"
+
 [project.optional-dependencies]
 dev = [
     "black>=23.0.0",
