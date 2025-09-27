@@ -246,24 +246,54 @@ def run_all_tests():
 
     try:
         # Test 1: User creation
+        import uuid
+        unique_suffix = str(uuid.uuid4())[:8]
+        test_username = f"testuser_{unique_suffix}"
+
         with tempfile.TemporaryDirectory() as temp_dir:
             auth = UserAuth(temp_dir)
-            assert auth.create_user("testuser", "password123") == True
-            assert auth.user_exists("testuser") == True
-            assert auth.create_user("testuser", "password123") == False
+
+            # Test first user creation
+            try:
+                result1 = auth.create_user(test_username, "password123")
+                if result1 != True:
+                    raise AssertionError(f"First create_user returned {result1}, expected True")
+            except AssertionError:
+                raise  # Re-raise our own assertions
+            except Exception as inner_e:
+                raise AssertionError(f"create_user raised exception: {type(inner_e).__name__}: {inner_e}")
+
+            # Test user exists
+            result2 = auth.user_exists(test_username)
+            if result2 != True:
+                raise AssertionError(f"user_exists returned {result2}, expected True")
+
+            # Test duplicate user creation
+            result3 = auth.create_user(test_username, "password123")
+            if result3 != False:
+                raise AssertionError(f"Duplicate create_user returned {result3}, expected False")
+
         results.append({"test": "User Creation", "status": "PASSED"})
     except Exception as e:
-        results.append({"test": "User Creation", "status": "FAILED", "error": str(e)})
+        import traceback
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        if not error_msg.strip() or error_msg == ": ":
+            error_msg = f"Exception occurred: {traceback.format_exc()}"
+        results.append({"test": "User Creation", "status": "FAILED", "error": error_msg})
 
     try:
         # Test 2: User login
+        import uuid
+        unique_suffix = str(uuid.uuid4())[:8]
+        test_username = f"testuser_{unique_suffix}"
+
         with tempfile.TemporaryDirectory() as temp_dir:
             auth = UserAuth(temp_dir)
-            auth.create_user("testuser", "password123")
-            note_key = auth.login("testuser", "password123")
+            auth.create_user(test_username, "password123")
+            note_key = auth.login(test_username, "password123")
             assert note_key is not None
             assert len(note_key) == 32
-            assert auth.login("testuser", "wrongpassword") is None
+            assert auth.login(test_username, "wrongpassword") is None
         results.append({"test": "User Login", "status": "PASSED"})
     except Exception as e:
         results.append({"test": "User Login", "status": "FAILED", "error": str(e)})
