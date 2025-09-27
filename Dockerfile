@@ -1,71 +1,45 @@
-# SecurNote SSH Server
-FROM python:3.11-slim
+# Lightweight SecurNote SSH Server
+FROM python:3.11-alpine
 
-# Install system dependencies including SSH server
-RUN apt-get update && apt-get install -y \
-    openssh-server \
-    build-essential \
-    sudo \
-    nano \
-    vim \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Poetry
-RUN pip install poetry
+# Install minimal dependencies
+RUN apk add --no-cache openssh-server nano vim
 
 # Create securnote user
-RUN useradd -m -s /bin/bash securnote && \
-    echo "securnote:securnote" | chpasswd && \
+RUN adduser -D -s /bin/sh securnote && \
     mkdir -p /home/securnote/.ssh && \
     chown -R securnote:securnote /home/securnote && \
     chmod 700 /home/securnote/.ssh
 
-# Setup SSH
-RUN mkdir -p /var/run/sshd && \
+# Configure SSH
+RUN ssh-keygen -A && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
-    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config
+    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
-# Create application directory
-WORKDIR /opt/securnote
-RUN chown securnote:securnote /opt/securnote
-
-# Copy application files
-COPY pyproject.toml poetry.lock ./
+# Setup application
+WORKDIR /app
+COPY pyproject.toml ./
 COPY securnote/ ./securnote/
-COPY scripts/ ./scripts/
 
-# Configure poetry and install dependencies as securnote user
+# Install uv (super fast pip replacement)
+RUN pip install --no-cache-dir uv
+
+# Install app with uv
+RUN uv pip install --system --no-cache .
+
+# Setup user environment
 USER securnote
-RUN poetry config virtualenvs.create false && \
-    poetry install --only=main
+RUN mkdir -p /home/securnote/.securnote && \
+    echo 'alias securnote="python -m securnote"' >> /home/securnote/.profile
 
-# Create startup script
-RUN echo '#!/bin/bash\ncd /opt/securnote\nexec poetry run python -m securnote "$@"' > /home/securnote/securnote && \
-    chmod +x /home/securnote/securnote
-
-# Setup shell aliases
-RUN echo 'alias securnote="/home/securnote/securnote"' >> /home/securnote/.bashrc && \
-    echo 'export PATH="/home/securnote/.local/bin:$PATH"' >> /home/securnote/.bashrc && \
-    mkdir -p /home/securnote/.securnote
-
-# Switch back to root for SSH setup
+# Switch to root for startup
 USER root
 
-# Copy SSH keys (if provided)
-COPY ssh_keys/authorized_keys /home/securnote/.ssh/authorized_keys 2>/dev/null || \
-    echo "# Add your public keys here" > /home/securnote/.ssh/authorized_keys
-
-RUN chown securnote:securnote /home/securnote/.ssh/authorized_keys && \
+# Setup SSH keys
+RUN echo "# Add your public keys here" > /home/securnote/.ssh/authorized_keys && \
+    chown securnote:securnote /home/securnote/.ssh/authorized_keys && \
     chmod 600 /home/securnote/.ssh/authorized_keys
 
-# Create startup script
-COPY scripts/ssh_server_start.sh /usr/local/bin/start_ssh_server.sh
-RUN chmod +x /usr/local/bin/start_ssh_server.sh
-
-# Expose SSH port
 EXPOSE 22
 
-# Start SSH server
-CMD ["/usr/local/bin/start_ssh_server.sh"]
+# Simple startup
+CMD ["/usr/sbin/sshd", "-D"]
