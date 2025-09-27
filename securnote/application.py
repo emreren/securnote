@@ -4,6 +4,7 @@ Application facade layer - maintains backward compatibility with existing API.
 
 from typing import List, Optional, Tuple
 
+from .logging_config import get_logger
 from .exceptions import (
     AccessDeniedError,
     CertificateRevokedError,
@@ -29,6 +30,9 @@ class SecurNoteApplication:
 
     def __init__(self, data_dir: str = "data"):
         """Initialize application with all dependencies."""
+        # Logger
+        self.logger = get_logger(__name__)
+
         # Configuration
         self.config = SecurityConfig()
 
@@ -60,6 +64,7 @@ class SecurNoteApplication:
             # Save user first (without certificate)
             success = self.user_repo.save_user(user)
             if not success:
+                self.logger.warning(f"Failed to save user {username} to repository")
                 return False
 
             # Then issue certificate and update user
@@ -67,7 +72,11 @@ class SecurNoteApplication:
 
             return True
 
-        except UserAlreadyExistsError:
+        except UserAlreadyExistsError as e:
+            self.logger.warning(f"User {username} already exists: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error creating user {username}: {e}")
             return False
 
     def login(self, username: str, password: str) -> Optional[bytes]:
