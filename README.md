@@ -7,7 +7,7 @@ Encrypted notes via SSH
 ```bash
 git clone https://github.com/emreren/securnote.git
 cd securnote
-./quick-start.sh
+./install.sh
 ```
 
 ## Features

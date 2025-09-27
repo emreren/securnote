@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# SecurNote Quick Start Script
+# SecurNote Installation Script
 set -e
 
-echo "🚀 SecurNote Quick Start"
-echo "========================"
+echo "SecurNote Installation"
+echo "====================="
 
 # Check if Docker is available and prefer it
 if command -v docker &> /dev/null; then
-    echo "🐳 Using Docker deployment..."
+    echo "Using Docker deployment..."
 
     # Create SSH keys if not exist
     if [ ! -d "ssh_keys" ]; then
@@ -31,33 +31,33 @@ if command -v docker &> /dev/null; then
         securnote
 
     echo ""
-    echo "🎉 SecurNote is running!"
+    echo "SecurNote is running!"
     echo ""
     echo "Connect with:"
     echo "  ssh -i ssh_keys/id_rsa securnote@localhost -p 2222"
     echo ""
 
 else
-    echo "🐍 Using local Python deployment..."
+    echo "Using local Python deployment..."
 
     # Create virtual environment
-    echo "📦 Creating virtual environment..."
+    echo "Creating virtual environment..."
     python3 -m venv .venv
     source .venv/bin/activate
 
     # Install uv in venv
-    echo "⚡ Installing uv..."
+    echo "Installing uv..."
     pip install uv
 
     # Install dependencies with uv
-    echo "📦 Installing dependencies..."
+    echo "Installing dependencies..."
     uv pip install -e .
 
     # Create data directory
     mkdir -p data
 
     echo ""
-    echo "🎉 SecurNote is ready!"
+    echo "SecurNote installation completed!"
     echo ""
     echo "Quick commands (activate venv first):"
     echo "  source .venv/bin/activate"
