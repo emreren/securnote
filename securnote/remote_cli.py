@@ -11,6 +11,8 @@ from .cli import SecurNoteCLI
 from .auth import UserAuth
 from .crypto import NoteCrypto
 from .storage import NoteStorage
+from .activity_logger import activity_logger
+from .metrics import metrics_collector
 
 
 class RemoteCLI:
@@ -24,9 +26,12 @@ class RemoteCLI:
         """Register a new user."""
         if self.auth.user_exists(username):
             print(f"Error: User '{username}' already exists")
+            activity_logger.log_activity(username, "register", False, "User already exists")
             return False
 
         success = self.auth.create_user(username, password)
+        activity_logger.log_activity(username, "register", success)
+        metrics_collector.record_operation(username, "register", success)
         if success:
             print(f"✓ User '{username}' registered successfully")
             return True
@@ -37,6 +42,9 @@ class RemoteCLI:
     def login_user(self, username: str, password: str) -> Optional[NoteCrypto]:
         """Login user and return crypto instance."""
         note_key = self.auth.login(username, password)
+        success = note_key is not None
+        activity_logger.log_activity(username, "login", success)
+        metrics_collector.record_operation(username, "login", success, "invalid_credentials" if not success else None)
         if note_key:
             return NoteCrypto(note_key)
         return None
@@ -49,6 +57,8 @@ class RemoteCLI:
             return
 
         notes = self.storage.get_notes(username)
+        activity_logger.log_activity(username, "list_notes", True, f"Listed {len(notes)} notes")
+        metrics_collector.record_operation(username, "list_notes", True)
         if not notes:
             print("No notes found")
             return
@@ -78,7 +88,11 @@ class RemoteCLI:
         note = self.storage.get_note_by_id(username, note_id)
         if not note:
             print("Error: Note not found")
+            activity_logger.log_activity(username, "view_note", False, f"Note {note_id} not found")
             return
+
+        activity_logger.log_activity(username, "view_note", True, f"Viewed note {note_id}")
+        metrics_collector.record_operation(username, "view_note", True)
 
         try:
             title = crypto.decrypt(note["title_encrypted"], note["title_nonce"])
@@ -119,9 +133,14 @@ class RemoteCLI:
                 username, title_enc, content_enc, title_nonce, content_nonce
             )
 
+            activity_logger.log_activity(username, "add_note", True, f"Added note: {title[:50]}")
+            metrics_collector.record_operation(username, "add_note", True)
+            metrics_collector.record_note_creation(username)
             print(f"✓ Note '{title}' added successfully")
             print(f"Note ID: {note_id}")
         except Exception as e:
+            activity_logger.log_activity(username, "add_note", False, f"Failed: {str(e)}")
+            metrics_collector.record_operation(username, "add_note", False, "encryption_error")
             print(f"Error: Failed to add note - {e}")
 
     def delete_note(self, username: str, password: str, note_id: str) -> None:
@@ -135,6 +154,7 @@ class RemoteCLI:
         note = self.storage.get_note_by_id(username, note_id)
         if not note:
             print("Error: Note not found")
+            activity_logger.log_activity(username, "delete_note", False, f"Note {note_id} not found")
             return
 
         try:
@@ -145,8 +165,12 @@ class RemoteCLI:
 
         # Delete note
         if self.storage.delete_note(username, note_id):
+            activity_logger.log_activity(username, "delete_note", True, f"Deleted note {note_id}")
+            metrics_collector.record_operation(username, "delete_note", True)
             print("✓ Note deleted successfully")
         else:
+            activity_logger.log_activity(username, "delete_note", False, f"Failed to delete note {note_id}")
+            metrics_collector.record_operation(username, "delete_note", False, "storage_error")
             print("Error: Failed to delete note")
 
     def interactive_mode(self) -> None:

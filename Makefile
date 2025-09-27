@@ -6,7 +6,8 @@ help:
 	@echo "  dev-deps    Install development dependencies"
 	@echo "  format      Format code with black and isort"
 	@echo "  lint        Run linting checks"
-	@echo "  test        Run tests with coverage"
+	@echo "  test        Run all tests with coverage"
+	@echo "  test-core   Run core functionality tests only"
 	@echo "  test-unit   Run unit tests only"
 	@echo "  test-integration  Run integration tests only"
 	@echo "  check       Run all checks (format, lint, test)"
@@ -29,6 +30,9 @@ lint:
 
 test:
 	poetry run pytest
+
+test-core:
+	poetry run pytest tests/test_auth.py tests/test_crypto.py tests/test_storage.py -v
 
 test-unit:
 	poetry run pytest -m "unit or not integration"

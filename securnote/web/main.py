@@ -1,378 +1,157 @@
 """
-SecurNote FastAPI - Clean Architecture Implementation
+SecurNote Info API - Minimal informational interface
 """
 
-import secrets
-from typing import List, Optional
-
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
+from typing import List, Optional
+import os
+import secrets
 
-from ..application import SecurNoteApplication, get_application
-from ..crypto import NoteCrypto
-from ..exceptions import (
-    CertificateRevokedError,
-    InvalidCredentialsError,
-    UserNotFoundError,
-)
 from ..logging_config import get_logger
-from ..storage import NoteStorage
+from ..activity_logger import activity_logger
 
 logger = get_logger("web")
 
 app = FastAPI(
-    title="SecurNote API",
-    description="Secure note-taking API with ZK-proof, PKI, and CRL",
+    title="SecurNote Admin Panel",
+    description="Admin monitoring interface for SecurNote. Shows user activity logs.",
     version="2.0.0",
 )
 
-# Initialize clean architecture application
-app_instance = get_application()
-storage = NoteStorage()  # Legacy compatibility
 security = HTTPBasic()
 
-# Session storage (simple in-memory)
-active_sessions = {}
+# Admin credentials from environment
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "securnote123")
 
-
-# Pydantic models
-class UserCreate(BaseModel):
-    username: str
-    password: str
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-
-class NoteCreate(BaseModel):
-    title: str
-    content: str
-
-
-class NoteResponse(BaseModel):
-    id: str
-    title: str
-    content: str
-    timestamp: str
-
-
-class NoteListItem(BaseModel):
-    id: str
-    title: str
-    timestamp: str
-
-
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    """Authenticate user with enhanced security validation."""
-    try:
-        logger.info(f"Authentication attempt for user: {credentials.username}")
-
-        # Enhanced authentication with certificate validation
-        note_key, access_granted = app_instance.authenticate_with_validation(
-            credentials.username, credentials.password
-        )
-
-        if not note_key:
-            logger.warning(f"Authentication failed for user: {credentials.username}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-                headers={"WWW-Authenticate": "Basic"},
-            )
-
-        if not access_granted:
-            logger.warning(
-                f"Certificate access denied for user: {credentials.username}"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Certificate revoked or invalid - access denied",
-            )
-
-        return {
-            "username": credentials.username,
-            "note_key": note_key,
-            "crypto": NoteCrypto(note_key),
-        }
-
-    except (UserNotFoundError, InvalidCredentialsError):
+def verify_admin(credentials: HTTPBasicCredentials = Depends(security)):
+    """Verify admin credentials."""
+    is_correct_username = secrets.compare_digest(credentials.username, ADMIN_USERNAME)
+    is_correct_password = secrets.compare_digest(credentials.password, ADMIN_PASSWORD)
+    if not (is_correct_username and is_correct_password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed",
+            status_code=401,
+            detail="Invalid admin credentials",
             headers={"WWW-Authenticate": "Basic"},
         )
-    except CertificateRevokedError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Certificate revoked - access denied",
-        )
+    return credentials.username
 
 
-@app.post("/register")
-def register_user(user: UserCreate):
-    """Register new user with full security setup."""
-    success = app_instance.create_user(user.username, user.password)
-    if success:
-        return {
-            "message": f"User '{user.username}' created successfully",
-            "features": [
-                "Traditional Authentication",
-                "Zero-Knowledge Proof",
-                "PKI Certificate",
-                "Certificate-based Access Control",
-            ],
-        }
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
-        )
+class SystemInfo(BaseModel):
+    service: str
+    version: str
+    description: str
+    usage: dict
+
+class ActivityLog(BaseModel):
+    timestamp: str
+    username: str
+    action: str
+    details: Optional[str]
+    ip_address: Optional[str]
+    success: bool
+
+class ActivityStats(BaseModel):
+    total_activities: int
+    recent_activities: int
+    unique_users: int
+    top_users: List[dict]
+    action_breakdown: List[dict]
 
 
-@app.get("/users/me")
-def get_current_user_info(current_user=Depends(get_current_user)):
-    """Get comprehensive user information."""
-    user_info = app_instance.get_user_info(current_user["username"])
+@app.get("/")
+def root():
+    """Root endpoint with usage information."""
     return {
-        "username": current_user["username"],
-        "user_info": user_info,
-        "security_status": "All systems operational",
+        "service": "SecurNote",
+        "version": "2.0.0",
+        "description": "Secure note-taking with end-to-end encryption",
+        "primary_interface": "SSH/CLI",
+        "usage": {
+            "ssh_connect": "ssh securnote@server securnote",
+            "commands": {
+                "register": "ssh securnote@server 'securnote register user pass'",
+                "list": "ssh securnote@server 'securnote list user pass'",
+                "add": "ssh securnote@server 'securnote add user pass \"title\" \"content\"'",
+                "view": "ssh securnote@server 'securnote view user pass note-id'",
+                "help": "ssh securnote@server 'securnote --help'"
+            }
+        },
+        "features": [
+            "End-to-end encryption",
+            "SSH-based access",
+            "External editor support",
+            "Multi-user isolation",
+            "Zero-knowledge authentication"
+        ]
     }
 
 
-@app.post("/notes", response_model=dict)
-def create_note(note: NoteCreate, current_user=Depends(get_current_user)):
-    """Create a new encrypted note."""
-    title_enc, title_nonce = current_user["crypto"].encrypt(note.title)
-    content_enc, content_nonce = current_user["crypto"].encrypt(note.content)
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "securnote-info-api"}
 
-    note_id = storage.add_note(
-        current_user["username"], title_enc, content_enc, title_nonce, content_nonce
+
+@app.get("/info", response_model=SystemInfo)
+def system_info():
+    """Detailed system information."""
+    return SystemInfo(
+        service="SecurNote",
+        version="2.0.0",
+        description="Terminal-based secure note-taking system with SSH access",
+        usage={
+            "deployment": "Use docker-compose -f docker-compose.ssh.yml up",
+            "connection": "ssh securnote@your-server securnote",
+            "documentation": "/workspace/securnote/DEPLOYMENT_GUIDE.md"
+        }
     )
 
-    return {"id": note_id, "message": "Note created successfully"}
 
-
-@app.get("/notes", response_model=List[NoteListItem])
-def list_notes(current_user=Depends(get_current_user)):
-    """List all user's notes with decrypted titles."""
-    notes = storage.get_notes(current_user["username"])
-
-    decrypted_notes = []
-    for note in notes:
-        try:
-            title = current_user["crypto"].decrypt(
-                note["title_encrypted"], note["title_nonce"]
-            )
-            decrypted_notes.append(
-                NoteListItem(
-                    id=note["id"], title=title, timestamp=note["timestamp"][:19]
-                )
-            )
-        except:
-            decrypted_notes.append(
-                NoteListItem(
-                    id=note["id"],
-                    title="[Decryption Error]",
-                    timestamp=note["timestamp"][:19],
-                )
-            )
-
-    return decrypted_notes
-
-
-@app.get("/notes/{note_id}", response_model=NoteResponse)
-def get_note(note_id: str, current_user=Depends(get_current_user)):
-    """Get a specific note by ID."""
-    note = storage.get_note_by_id(current_user["username"], note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
-
+@app.get("/admin/activities", response_model=List[ActivityLog])
+def get_activities(limit: int = 100, admin: str = Depends(verify_admin)):
+    """Get recent user activities (admin only)."""
     try:
-        title = current_user["crypto"].decrypt(
-            note["title_encrypted"], note["title_nonce"]
-        )
-        content = current_user["crypto"].decrypt(
-            note["content_encrypted"], note["content_nonce"]
-        )
-
-        return NoteResponse(
-            id=note["id"],
-            title=title,
-            content=content,
-            timestamp=note["timestamp"][:19],
-        )
+        activities = activity_logger.get_recent_activities(limit)
+        return [ActivityLog(**activity) for activity in activities]
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to decrypt note")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch activities: {str(e)}")
 
 
-@app.delete("/notes/{note_id}")
-def delete_note(note_id: str, current_user=Depends(get_current_user)):
-    """Delete a note by ID."""
-    if storage.delete_note(current_user["username"], note_id):
-        return {"message": "Note deleted successfully"}
-    else:
-        raise HTTPException(status_code=404, detail="Note not found")
-
-
-@app.post("/test/run-all", tags=["Testing"])
-def run_all_tests():
-    """Run all basic tests and return results."""
-    import os
-    import sys
-    import tempfile
-
-    # Use absolute imports to avoid relative import issues
+@app.get("/admin/activities/{username}", response_model=List[ActivityLog])
+def get_user_activities(username: str, limit: int = 50, admin: str = Depends(verify_admin)):
+    """Get activities for specific user (admin only)."""
     try:
-        from securnote.auth import UserAuth
-        from securnote.crypto import NoteCrypto
-        from securnote.storage import NoteStorage
-    except ImportError:
-        # Fallback for different environments
-        import os
-        import sys
-
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        parent_dir = os.path.dirname(os.path.dirname(current_dir))
-        if parent_dir not in sys.path:
-            sys.path.insert(0, parent_dir)
-        from securnote.auth import UserAuth
-        from securnote.crypto import NoteCrypto
-        from securnote.storage import NoteStorage
-
-    results = []
-
-    try:
-        # Test 1: User creation
-        import uuid
-        unique_suffix = str(uuid.uuid4())[:8]
-        test_username = f"testuser_{unique_suffix}"
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            auth = UserAuth(temp_dir)
-
-            # Test first user creation
-            try:
-                result1 = auth.create_user(test_username, "password123")
-                if result1 != True:
-                    raise AssertionError(f"First create_user returned {result1}, expected True")
-            except AssertionError:
-                raise  # Re-raise our own assertions
-            except Exception as inner_e:
-                raise AssertionError(f"create_user raised exception: {type(inner_e).__name__}: {inner_e}")
-
-            # Test user exists
-            result2 = auth.user_exists(test_username)
-            if result2 != True:
-                raise AssertionError(f"user_exists returned {result2}, expected True")
-
-            # Test duplicate user creation
-            result3 = auth.create_user(test_username, "password123")
-            if result3 != False:
-                raise AssertionError(f"Duplicate create_user returned {result3}, expected False")
-
-        results.append({"test": "User Creation", "status": "PASSED"})
+        activities = activity_logger.get_user_activities(username, limit)
+        return [ActivityLog(username=username, **activity) for activity in activities]
     except Exception as e:
-        import traceback
-        error_msg = f"{type(e).__name__}: {str(e)}"
-        if not error_msg.strip() or error_msg == ": ":
-            error_msg = f"Exception occurred: {traceback.format_exc()}"
-        results.append({"test": "User Creation", "status": "FAILED", "error": error_msg})
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user activities: {str(e)}")
 
+
+@app.get("/admin/stats", response_model=ActivityStats)
+def get_activity_stats(admin: str = Depends(verify_admin)):
+    """Get activity statistics (admin only)."""
     try:
-        # Test 2: User login
-        import uuid
-        unique_suffix = str(uuid.uuid4())[:8]
-        test_username = f"testuser_{unique_suffix}"
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            auth = UserAuth(temp_dir)
-            auth.create_user(test_username, "password123")
-            note_key = auth.login(test_username, "password123")
-            assert note_key is not None
-            assert len(note_key) == 32
-            assert auth.login(test_username, "wrongpassword") is None
-        results.append({"test": "User Login", "status": "PASSED"})
+        stats = activity_logger.get_activity_stats()
+        return ActivityStats(**stats)
     except Exception as e:
-        results.append({"test": "User Login", "status": "FAILED", "error": str(e)})
+        raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
 
+
+@app.get("/admin/dashboard")
+def admin_dashboard(admin: str = Depends(verify_admin)):
+    """Admin dashboard with summary information."""
     try:
-        # Test 3: Note encryption
-        with tempfile.TemporaryDirectory() as temp_dir:
-            auth = UserAuth(temp_dir)
-            auth.create_user("testuser", "password123")
-            note_key = auth.login("testuser", "password123")
-            crypto = NoteCrypto(note_key)
-            original_text = "This is a secret note!"
-            encrypted, nonce = crypto.encrypt(original_text)
-            assert encrypted != original_text
-            decrypted = crypto.decrypt(encrypted, nonce)
-            assert decrypted == original_text
-        results.append({"test": "Note Encryption", "status": "PASSED"})
+        stats = activity_logger.get_activity_stats()
+        recent_activities = activity_logger.get_recent_activities(10)
+
+        return {
+            "admin": admin,
+            "stats": stats,
+            "recent_activities": recent_activities,
+            "status": "SecurNote Admin Panel Active"
+        }
     except Exception as e:
-        results.append({"test": "Note Encryption", "status": "FAILED", "error": str(e)})
-
-    try:
-        # Test 4: Note storage
-        with tempfile.TemporaryDirectory() as temp_dir:
-            storage_test = NoteStorage(temp_dir)
-            note_id = storage_test.add_note(
-                "testuser",
-                "encrypted_title",
-                "encrypted_content",
-                "nonce123",
-                "nonce456",
-            )
-            notes = storage_test.get_notes("testuser")
-            assert len(notes) == 1
-            note = storage_test.get_note_by_id("testuser", note_id)
-            assert note is not None
-            assert storage_test.delete_note("testuser", note_id) == True
-        results.append({"test": "Note Storage", "status": "PASSED"})
-    except Exception as e:
-        results.append({"test": "Note Storage", "status": "FAILED", "error": str(e)})
-
-    passed = len([r for r in results if r["status"] == "PASSED"])
-    total = len(results)
-
-    return {
-        "summary": f"{passed}/{total} tests passed",
-        "all_passed": passed == total,
-        "results": results,
-    }
-
-
-# Certificate information endpoint (user can view their own certificate)
-@app.get("/users/me/certificate")
-def get_my_certificate(current_user=Depends(get_current_user)):
-    """Get current user's certificate information."""
-    user_cert = app_instance.get_user_certificate(current_user["username"])
-    if not user_cert:
-        raise HTTPException(status_code=404, detail="Certificate not found")
-
-    is_valid = app_instance.validate_user_access(current_user["username"])
-
-    return {
-        "certificate": user_cert,
-        "validation_status": {
-            "is_valid": is_valid,
-            "signature_verified": True,
-            "not_revoked": is_valid,
-            "issued_by_trusted_ca": True,
-        },
-        "security_level": "Enterprise Grade" if is_valid else "Revoked",
-        "admin_note": "For certificate management operations, contact system administrator",
-    }
-
-
-@app.post("/system/cleanup", tags=["System"])
-def cleanup_system():
-    """Cleanup expired challenges and optimize system."""
-    cleaned_challenges = app_instance.cleanup_expired_challenges()
-    return {
-        "message": "System cleanup completed",
-        "expired_challenges_removed": cleaned_challenges,
-        "system_status": "Optimized",
-    }
+        raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")

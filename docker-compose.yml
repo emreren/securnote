@@ -1,7 +1,10 @@
 version: '3.8'
 
+# Minimal test API for development/testing only
+# For production use: docker-compose -f docker-compose.ssh.yml up
+
 services:
-  app:
+  test-api:
     build: .
     ports:
       - "8000:8000"
@@ -12,17 +15,8 @@ services:
       - LOG_LEVEL=INFO
     command: ["python", "scripts/run_web.py"]
     restart: unless-stopped
-
-  admin:
-    build: .
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=INFO
-    command: ["python", "scripts/run_admin.py"]
-    depends_on:
-      - app
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

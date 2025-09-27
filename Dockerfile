@@ -26,8 +26,8 @@ COPY . .
 # Create data directory
 RUN mkdir -p data
 
-# Expose ports for both main API and admin panel
-EXPOSE 8000 8001
+# Expose port for test API only
+EXPOSE 8000
 
-# Run the application (default: main API)
+# Run the test API (minimal interface)
 CMD ["python", "scripts/run_web.py"]
